@@ -1,3 +1,3 @@
 export const users = {
-    admin: 123456
+    admin: "Hue18032002!",
 }
