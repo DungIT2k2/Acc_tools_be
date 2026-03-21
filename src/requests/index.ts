@@ -42,11 +42,11 @@ export interface InvoiceData {
   ghichu: string;
 }
 
-export interface LogginHddtReq {
+export interface LogginInvoiceReq {
   username: string;
-  password: string;
-  ckey: string;
-  cvalue: string;
+  password?: string;
+  ckey?: string;
+  cvalue?: string;
 }
 
 

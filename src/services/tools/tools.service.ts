@@ -4,17 +4,18 @@ import { ExcelService } from '../excel/excel.service';
 import { AuthService } from '../auth/auth.service';
 import axios from 'axios';
 import moment from 'moment';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class ToolsService {
   private readonly accInvoiceMap = new Map<string, object>();
+  private readonly invoiceMemCache = new Map<string, object>();
   private readonly baseUrlInvoice = 'https://hoadondientu.gdt.gov.vn:30000';
-  private readonly tokenMock =
-    'eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIwMzE5MDcwMTE0IiwidHlwZSI6MiwiZXhwIjoxNzc0MTU5MDMxLCJpYXQiOjE3NzQwNzI2MzF9.jxSO4qvWQk5SNFrp5Ay9m93kocOIsvtLSIKgO1dvp7AiNxnUTILdiDWiWyfgZgs6QYAAdgo0f0LyKKsBryL9Iw';
   constructor(
     private readonly excelService: ExcelService,
     private readonly authService: AuthService,
-  ) {}
+    private readonly redisService: RedisService,
+  ) { }
   async handle(files: any): Promise<object> {
     const taxFile = files?.taxFile?.[0];
     const myFile = files?.myFile?.[0];
@@ -196,58 +197,76 @@ export class ToolsService {
   }
 
   async handleLoginInvoice(body: any, req: any): Promise<object> {
-    const { username, password, ckey, cvalue } = body;
+    const { username, password = '', ckey = '', cvalue = '' } = body;
     if (!req['user']['username'])
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
 
+    const keyRedis = `invoice_${username}`;
+    const getDataCache = await this.redisService.get(keyRedis);
     let token = null;
-    try {
-      const loginRes = await axios.post(
-        `${this.baseUrlInvoice}/security-taxpayer/authenticate`,
-        {
-          username,
-          password,
-          ckey,
-          cvalue,
-        },
-        {
-          timeout: 5000,
-        },
-      );
-      token = loginRes?.data?.token;
-    } catch (error) {
-      Logger.error(`Error logging in to invoice system: ${error.message}`);
-      throw new HttpException(
-        error.response?.data?.message || 'Đăng nhập hoá đơn điện tử thất bại',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    if (!token)
-      throw new HttpException(
-        'Đăng nhập hoá đơn điện tử thất bại',
-        HttpStatus.BAD_REQUEST,
-      );
     let fullName = null;
-    try {
-      const loginRes = await axios.get(
-        `${this.baseUrlInvoice}/security-taxpayer/profile`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
+    if (getDataCache) {
+      const cachedData = JSON.parse(getDataCache);
+      token = cachedData.tokenInvoice;
+      fullName = cachedData.fullName;
+    }
+    if (!token) {
+      try {
+        const loginRes = await axios.post(
+          `${this.baseUrlInvoice}/security-taxpayer/authenticate`,
+          {
+            username,
+            password,
+            ckey,
+            cvalue,
           },
-          timeout: 5000,
-        },
-      );
-      fullName = loginRes?.data?.name || 'Unknown';
-    } catch (error) {
-      Logger.error(
-        `Error fetching profile from invoice system: ${error.message}`,
-      );
+          {
+            timeout: 5000,
+          },
+        );
+        token = loginRes?.data?.token;
+      } catch (error) {
+        Logger.error(`Error logging in to invoice system: ${error.message}`);
+        throw new HttpException(
+          error.response?.data?.message || 'Đăng nhập hoá đơn điện tử thất bại',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+
+      if (!token)
+        throw new HttpException(
+          'Đăng nhập hoá đơn điện tử thất bại',
+          HttpStatus.BAD_REQUEST,
+        );
+
+      try {
+        const loginRes = await axios.get(
+          `${this.baseUrlInvoice}/security-taxpayer/profile`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 5000,
+          },
+        );
+        fullName = loginRes?.data?.name || 'Unknown';
+      } catch (error) {
+        Logger.error(
+          `Error fetching profile from invoice system: ${error.message}`,
+        );
+      }
+
+      this.redisService.set(keyRedis, JSON.stringify({
+        tokenInvoice: token,
+        fullName,
+      }), 24 * 60 * 60);
     }
 
     const authorization = req['headers']['authorization'].split(' ')[1];
-    const key = `${username}_${ckey}`;
+    const timeNow = Date.now();
+    const key = `${username}_${timeNow}`;
+
     this.accInvoiceMap.set(key, {
       tokenInvoice: token,
       access_token: authorization,
@@ -256,16 +275,16 @@ export class ToolsService {
       username: req['user']['username'],
       fullName,
       usernameInvoice: username,
-      ckey,
+      time: timeNow,
     });
     return { access_token };
   }
 
   async handleLogoutInvoice(req: any): Promise<object> {
-    if (!req['user']['usernameInvoice'] || !req['user']['ckey'])
+    if (!req['user']['usernameInvoice'] || !req['user']['time'])
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-    const { username, usernameInvoice, ckey } = req['user'];
-    const key = `${usernameInvoice}_${ckey}`;
+    const { username, usernameInvoice, time } = req['user'];
+    const key = `${usernameInvoice}_${time}`;
     this.accInvoiceMap.get(key);
     const access_token = this.accInvoiceMap.get(key)?.['access_token'];
     if (!access_token)
@@ -285,8 +304,13 @@ export class ToolsService {
 
     const { usernameInvoice, ckey } = req['user'];
     const key = `${usernameInvoice}_${ckey}`;
+    const cacheKey = `${usernameInvoice}_${from}_${to}_${size}`;
+    // if (this.invoiceMemCache.has(cacheKey)) {
+    //   Logger.log(`Cache hit for key ${cacheKey}`);
+    // return this.invoiceMemCache.get(cacheKey);
+    // }
     const token =
-      this.accInvoiceMap.get(key)?.['tokenInvoice'] || this.tokenMock;
+      this.accInvoiceMap.get(key)?.['tokenInvoice'];
 
     if (!token)
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
@@ -306,11 +330,15 @@ export class ToolsService {
       any[]
     >(token, invoiceCashRegister);
 
-    return {
+    const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
       invoiceNoCodeData: invoiceNoCodeDataRes,
       invoiceCashRegisterData: invoiceCashRegisterDataRes,
-    };
+    }
+
+    // if ()
+
+    return dataRes;
   }
 
   async callGetPurchaseInvoice<T>(token: string, url: string): Promise<T> {

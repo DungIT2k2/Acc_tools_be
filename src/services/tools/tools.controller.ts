@@ -34,7 +34,7 @@ export class ToolsController {
   @Post('loginInvoice')
   @HttpCode(200)
   handleLoginInvoice(
-    @Body() body: requests.LogginHddtReq,
+    @Body() body: requests.LogginInvoiceReq,
     @Req() req: Request,
   ): object {
     return this.toolsService.handleLoginInvoice(body, req);

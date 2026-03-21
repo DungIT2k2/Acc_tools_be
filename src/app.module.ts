@@ -4,9 +4,13 @@ import { AppService } from './app.service';
 import { AuthModule } from './services/auth/auth.module';
 import { ToolsModule } from './services/tools/tools.module';
 import { VerifyMiddleware } from './middleware';
+import { RedisModule } from './services/redis/redis.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [AuthModule, ToolsModule],
+  imports: [ConfigModule.forRoot({
+    isGlobal: true,
+  }), AuthModule, ToolsModule, RedisModule],
   controllers: [AppController],
   providers: [AppService],
 })
