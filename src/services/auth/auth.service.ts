@@ -14,9 +14,13 @@ export class AuthService {
     if (!userPassword) throw new HttpException('Tài khoản không tồn tại', HttpStatus.NOT_FOUND);
     if (password != userPassword) throw new HttpException('Sai mật khẩu', HttpStatus.NOT_FOUND);
 
-    const access_token = this.jwtService.sign({ username }, {
+    const access_token = this.signToken({ username });
+    return { access_token };
+  }
+
+  signToken(payload: any): string {
+    return this.jwtService.sign(payload, {
       expiresIn: "1d"
     });
-    return { access_token };
   }
 }
