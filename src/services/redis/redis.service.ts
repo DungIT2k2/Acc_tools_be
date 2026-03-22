@@ -25,7 +25,9 @@ export class RedisService {
         return this.redis.del(key);
     }
 
-    async getKeysByPattern(pattern: string): Promise<string[]> {
+    async getlistLoggedInvoice(
+        pattern: string,
+    ): Promise<{ key: string; value: string | null }[]> {
         let cursor = '0';
         const keys: string[] = [];
 
@@ -42,6 +44,13 @@ export class RedisService {
             keys.push(...result);
         } while (cursor !== '0');
 
-        return keys;
+        if (keys.length === 0) return [];
+
+        const values = await this.redis.mget(keys);
+
+        return keys.map((key, index) => ({
+            key: key.startsWith('invoice_') ? key.slice(8) : key,
+            value: values[index] ? JSON.parse(values[index]).fullName : 'Unknown'
+        }));
     }
 }

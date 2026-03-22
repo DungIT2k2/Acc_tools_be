@@ -196,9 +196,9 @@ export class ToolsService {
     return { myErrorArr, taxErrorArr };
   }
 
-  async listLogged(req: any): Promise<string[]> {
-    const listKey = await this.redisService.getKeysByPattern('invoice_*');
-    return listKey.map((key) => key.replace('invoice_', ''));
+  async listLogged(req: any): Promise<object[]> {
+    const listKey = await this.redisService.getlistLoggedInvoice('invoice_*');
+    return listKey;
   }
 
   async handleLoginInvoice(body: any, req: any): Promise<object> {
