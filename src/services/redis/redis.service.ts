@@ -24,4 +24,24 @@ export class RedisService {
     async del(key: string) {
         return this.redis.del(key);
     }
+
+    async getKeysByPattern(pattern: string): Promise<string[]> {
+        let cursor = '0';
+        const keys: string[] = [];
+
+        do {
+            const [nextCursor, result] = await this.redis.scan(
+                cursor,
+                'MATCH',
+                pattern,
+                'COUNT',
+                100,
+            );
+
+            cursor = nextCursor;
+            keys.push(...result);
+        } while (cursor !== '0');
+
+        return keys;
+    }
 }

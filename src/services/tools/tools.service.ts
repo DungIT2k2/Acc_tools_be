@@ -196,6 +196,11 @@ export class ToolsService {
     return { myErrorArr, taxErrorArr };
   }
 
+  async listLogged(req: any): Promise<string[]> {
+    const listKey = await this.redisService.getKeysByPattern('invoice_*');
+    return listKey.map((key) => key.replace('invoice_', ''));
+  }
+
   async handleLoginInvoice(body: any, req: any): Promise<object> {
     const { username, password = '', ckey = '', cvalue = '' } = body;
     if (!req['user']['username'])
@@ -303,32 +308,32 @@ export class ToolsService {
     }
 
     const { usernameInvoice, ckey } = req['user'];
-    const key = `${usernameInvoice}_${ckey}`;
+    const key = `invoice_${usernameInvoice}`;
     const cacheKey = `${usernameInvoice}_${from}_${to}_${size}`;
-    // if (this.invoiceMemCache.has(cacheKey)) {
-    //   Logger.log(`Cache hit for key ${cacheKey}`);
-    // return this.invoiceMemCache.get(cacheKey);
-    // }
-    const token =
-      this.accInvoiceMap.get(key)?.['tokenInvoice'];
-
+    let dataCache = await this.redisService.get(cacheKey);
+    if (dataCache) {
+      return JSON.parse(dataCache);
+    }
+    const token = await this.redisService.get(key);
     if (!token)
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
+
+    const tokenInvoice = JSON.parse(token)?.tokenInvoice;
 
     // return mockInvoiceData;
 
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=${size}&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
     const invoiceIssuedDataRes: any[] = await this.callGetPurchaseInvoice<
       any[]
-    >(token, urlInvoiceIssued);
+    >(tokenInvoice, urlInvoiceIssued);
     const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=${size}&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
     const invoiceNoCodeDataRes: any[] = await this.callGetPurchaseInvoice<
       any[]
-    >(token, urlInvoiceNoCode);
+    >(tokenInvoice, urlInvoiceNoCode);
     const invoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=${size}&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
     const invoiceCashRegisterDataRes: any[] = await this.callGetPurchaseInvoice<
       any[]
-    >(token, invoiceCashRegister);
+    >(tokenInvoice, invoiceCashRegister);
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -336,7 +341,7 @@ export class ToolsService {
       invoiceCashRegisterData: invoiceCashRegisterDataRes,
     }
 
-    // if ()
+    await this.redisService.set(cacheKey, JSON.stringify(dataRes), 24 * 60 * 60 * 3);
 
     return dataRes;
   }

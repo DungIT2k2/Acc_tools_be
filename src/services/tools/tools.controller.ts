@@ -15,7 +15,7 @@ import * as requests from 'src/requests';
 
 @Controller('module')
 export class ToolsController {
-  constructor(private readonly toolsService: ToolsService) {}
+  constructor(private readonly toolsService: ToolsService) { }
 
   @Post('handle')
   @UseInterceptors(
@@ -29,6 +29,12 @@ export class ToolsController {
     @UploadedFiles() files: { taxFile?: File[]; myFile?: File[] },
   ): object {
     return this.toolsService.handle(files);
+  }
+
+  @Get('listLoggedInvoice')
+  @HttpCode(200)
+  listLogged(@Req() req: Request): object {
+    return this.toolsService.listLogged(req);
   }
 
   @Post('loginInvoice')
