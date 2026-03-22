@@ -471,8 +471,10 @@ export class ToolsService {
       .map((item, index) => ({
         ...item,
         stt: index + 1,
+        tgtthue: item?.tgtthue || 0,
         ttcktmai: item?.ttcktmai || 0,
         tgtphi: item?.tgtphi || 0,
+        tgtttbso: !item?.tgtttbso ? item?.tgtcthue : item?.tgtttbso,
       }));
     return await this.excelService.exportJSONToExcelBuffer(
       dataExport,
