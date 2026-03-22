@@ -26,6 +26,22 @@ export interface TaxFile {
 }
 
 export interface InvoiceData {
+  stt: number; // STT
+  khmshdon: number; // Ký hiệu mẫu số
+  khhdon: string; // Ký hiệu hóa đơn
+  shdon: number; // Số hóa đơn
+  tdlap: string; // Ngày lập
+  nbmst: string; // MST người bán/MST người xuất hàng
+  nbten: string; // Tên người bán/Tên người xuất hàng
+  tgtcthue: number; // Tổng tiền chưa thuế
+  tgtthue: number; // Tổng tiền thuế
+  ttcktmai: number; // Tổng tiền chiết khấu thương mại
+  tgtphi: number; // Tổng tiền phí
+  tgtttbso: number; // Tổng tiền thanh toán
+  tthai: number; // Trạng thái hóa đơn (1: Hóa đơn mới, 2: Hóa đơn thay thế)
+}
+
+export interface UserInvoiceData {
   sott: number;
   codehd: string;
   formhd: string;

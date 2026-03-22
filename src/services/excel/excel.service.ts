@@ -96,10 +96,11 @@ export class ExcelService {
 
   const MAX_WIDTH = 60;
 
-  worksheet.columns.forEach((column, colIndex) => {
+  worksheet.columns.forEach((column) => {
     let maxLength = 10;
 
-    column.eachCell?.((cell) => {
+    column.eachCell?.((cell, rowNumber) => {
+      if (rowNumber === 1) return;
       const val = cell.value ? cell.value.toString() : '';
       maxLength = Math.max(maxLength, val.length);
     });

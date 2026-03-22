@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Invoice, InvoiceData, TaxFile } from 'src/requests';
+import { Invoice, InvoiceData, TaxFile, UserInvoiceData } from 'src/requests';
 import { ExcelService } from '../excel/excel.service';
 import { AuthService } from '../auth/auth.service';
 import axios from 'axios';
@@ -42,8 +42,8 @@ export class ToolsService {
         taxFileBuffer,
         'stt',
       );
-    const myData: InvoiceData[] =
-      await this.excelService.readExcelFromBufferToJSON<InvoiceData[]>(
+    const myData: UserInvoiceData[] =
+      await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
         'sott',
       );
@@ -369,11 +369,11 @@ export class ToolsService {
     const tokenInvoice = JSON.parse(token)?.tokenInvoice;
 
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
-    const invoiceIssuedDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, urlInvoiceIssued);
+    const invoiceIssuedDataRes: InvoiceData[] = await this.callGetPurchaseInvoice<InvoiceData[]>(tokenInvoice, urlInvoiceIssued);
     const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
-    const invoiceNoCodeDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, urlInvoiceNoCode);
+    const invoiceNoCodeDataRes: InvoiceData[] = await this.callGetPurchaseInvoice<InvoiceData[]>(tokenInvoice, urlInvoiceNoCode);
     const invoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    const invoiceCashRegisterDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, invoiceCashRegister, true);
+    const invoiceCashRegisterDataRes: InvoiceData[] = await this.callGetPurchaseInvoice<InvoiceData[]>(tokenInvoice, invoiceCashRegister, true);
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -481,5 +481,196 @@ export class ToolsService {
       TEMPLATE_EXPORT_INVOICE,
       ['tgtcthue', 'tgtthue', 'ttcktmai', 'tgtphi', 'tgtttbso']
     );
+  }
+
+  async comparePurchaseInvoice(files: any, formData: { from: string; to: string }, req: any): Promise<object> {
+    const { from, to } = formData;
+    const myFile = files?.File?.[0];
+
+    const data: object = await this.getPurchaseInvoice(req, { from, to });
+
+    if (!myFile)
+      throw new HttpException('Vui lòng import file', HttpStatus.BAD_REQUEST);
+    const myFileName = myFile?.originalname;
+
+    if (
+      !myFileName ||
+      !myFileName.includes('.xlsx')
+    )
+      throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
+    const myFileBuffer = myFile?.buffer;
+
+    const taxData: InvoiceData[] = [
+      ...(data['invoiceIssuedData']),
+      ...(data['invoiceNoCodeData']),
+      ...(data['invoiceCashRegisterData']),
+    ]
+      .sort((a, b) => {
+        const dateA = parseDate(a?.tdlap);
+        const dateB = parseDate(b?.tdlap);
+        return dateA - dateB;
+      })
+      .map((item, index) => ({
+        ...item,
+        stt: index + 1,
+        tgtthue: item?.tgtthue || 0,
+        ttcktmai: item?.ttcktmai || 0,
+        tgtphi: item?.tgtphi || 0,
+        tgtcthue: !item?.tgtcthue ? item?.tgtttbso : item?.tgtcthue,
+      }));
+    const myData: UserInvoiceData[] =
+      await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
+        myFileBuffer,
+        'sott',
+      );
+
+    const taxErrorArr: object[] = [];
+    const myErrorArr: object[] = [];
+    const mySuccessArr = new Map();
+    const taxSuccessArr: string[] = [];
+    const taxDataMap = new Map<string, InvoiceData>();
+
+    for (const tax of taxData) {
+      const stt = tax?.stt;
+      if (!stt) {
+        taxErrorArr.push({
+          row: 'Không xác định',
+          description: 'Có STT không hợp lệ',
+        });
+        continue;
+      }
+      const khms = tax?.khmshdon;
+      const khhd = tax?.khhdon?.trim();
+      const shd = tax?.shdon;
+      const mst = tax?.nbmst?.trim();
+      if (!khms) {
+        taxErrorArr.push({
+          row: stt,
+          description: 'Ký hiệu mẫu số không hợp lệ',
+        });
+        continue;
+      }
+      if (!khhd) {
+        taxErrorArr.push({
+          row: stt,
+          description: 'Ký hiệu hóa đơn không hợp lệ',
+        });
+        continue;
+      }
+      if (!shd) {
+        taxErrorArr.push({ row: stt, description: 'Số hóa đơn không hợp lệ' });
+        continue;
+      }
+      if (!mst) {
+        taxErrorArr.push({
+          row: stt,
+          description: 'MST người bán không hợp lệ',
+        });
+        continue;
+      }
+      if (tax.tthai !== 1) {
+        taxErrorArr.push({
+          row: stt,
+          description: `Hóa đơn không phải là hóa đơn mới`,
+        });
+        continue;
+      }
+      const key = `${khms}${khhd}${shd}${mst}`;
+      taxDataMap.set(key, tax);
+    }
+
+    for (const data of myData) {
+      const stt = data?.sott;
+      if (!stt && stt !== 0) {
+        myErrorArr.push({
+          row: 'Không xác định',
+          description: 'Có STT không hợp lệ',
+        });
+        continue;
+      }
+      const serihd = data.serihd?.trim();
+      const sohd = Number(data.sohd?.trim()).toString();
+      const masothue = data.masothue?.trim();
+
+      if (!serihd) {
+        myErrorArr.push({ row: stt, description: 'Seri hóa đơn không hợp lệ' });
+        continue;
+      }
+      if (!sohd) {
+        myErrorArr.push({ row: stt, description: 'Số hóa đơn không hợp lệ' });
+        continue;
+      }
+      if (!masothue) {
+        myErrorArr.push({
+          row: stt,
+          description: 'MST người bán không hợp lệ',
+        });
+        continue;
+      }
+
+      const key = `${serihd}${sohd}${masothue}`;
+
+      Logger.log(`[${stt}] Find key ${key} in tax data map`);
+      const matchData = taxDataMap.get(key);
+
+      if (matchData) {
+        // Logger.log(`Found matching data: ${JSON.stringify(matchData)}`)
+        let success = true;
+        const nghdchr = data.nghdchr;
+        const sotien_net = data.sotien_net;
+        const sotien_tax = data.sotien_tax;
+        if (nghdchr != matchData.tdlap) {
+          myErrorArr.push({
+            row: stt,
+            description: `Ngày lập không khớp với dữ liệu so sánh`,
+          });
+          success = false;
+        }
+        if (sotien_net != matchData.tgtcthue) {
+          myErrorArr.push({
+            row: stt,
+            description: `Tổng tiền chưa thuế không khớp với dữ liệu so sánh`,
+          });
+          success = false;
+        }
+        if (sotien_tax != matchData.tgtthue) {
+          myErrorArr.push({
+            row: stt,
+            description: `Tổng tiền thuế không khớp với dữ liệu so sánh`,
+          });
+          success = false;
+        }
+        if (success) {
+          if (!mySuccessArr.get(key)) {
+            mySuccessArr.set(key, stt);
+          } else {
+            myErrorArr.push({
+              row: stt,
+              description: `Trùng với dòng số ${mySuccessArr.get(key)}`,
+            });
+          }
+          if (!taxSuccessArr.includes(key)) {
+            taxSuccessArr.push(key);
+          }
+        }
+      } else {
+        Logger.warn(`[${stt}] No match found key ${key} in tax data map`);
+        myErrorArr.push({
+          row: stt,
+          description: 'Không tìm thấy dữ liệu hóa đơn khớp với dữ liệu so sánh',
+        });
+      }
+    }
+    taxSuccessArr.forEach((key) => {
+      taxDataMap.delete(key);
+    });
+    taxDataMap.forEach((value) => {
+      taxErrorArr.push({
+        row: value.stt,
+        description: 'Không tìm thấy dữ liệu hóa đơn khớp với file của bạn',
+      });
+    });
+
+    return { myErrorArr, taxErrorArr };
   }
 }

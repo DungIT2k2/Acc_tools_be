@@ -94,4 +94,19 @@ export class ToolsController {
 
     return res.send(buffer);
   }
+
+  @Post('comparePurchaseInvoice')
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'File', maxCount: 1 },
+    ]),
+  )
+  @HttpCode(200)
+  comparePurchaseInvoice(
+    @UploadedFiles() files: { File?: File[] },
+    @Body() formData: { from: string; to: string },
+    @Req() req: Request,
+  ): object {
+    return this.toolsService.comparePurchaseInvoice(files, formData, req);
+  }
 }
