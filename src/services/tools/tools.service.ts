@@ -6,6 +6,7 @@ import axios from 'axios';
 import moment from 'moment';
 import { RedisService } from '../redis/redis.service';
 import { TEMPLATE_EXPORT_INVOICE } from 'src/constants';
+import { parseDate } from 'src/utils';
 
 @Injectable()
 export class ToolsService {
@@ -410,12 +411,18 @@ export class ToolsService {
       ...(data['invoiceIssuedData']),
       ...(data['invoiceNoCodeData']),
       ...(data['invoiceCashRegisterData']),
-    ].map((item, index) => ({
-      ...item,
-      stt: index + 1,
-      ttcktmai: item?.ttcktmai || 0,
-      tgtphi: item?.tgtphi || 0,
-    }));
+    ]
+      .sort((a, b) => {
+        const dateA = parseDate(a?.tdlap);
+        const dateB = parseDate(b?.tdlap);
+        return dateA - dateB;
+      })
+      .map((item, index) => ({
+        ...item,
+        stt: index + 1,
+        ttcktmai: item?.ttcktmai || 0,
+        tgtphi: item?.tgtphi || 0,
+      }));
     return await this.excelService.exportJSONToExcelBuffer(
       dataExport,
       TEMPLATE_EXPORT_INVOICE,
