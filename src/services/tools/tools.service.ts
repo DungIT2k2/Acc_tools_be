@@ -5,6 +5,7 @@ import { AuthService } from '../auth/auth.service';
 import axios from 'axios';
 import moment from 'moment';
 import { RedisService } from '../redis/redis.service';
+import { TEMPLATE_EXPORT_INVOICE } from 'src/constants';
 
 @Injectable()
 export class ToolsService {
@@ -300,7 +301,7 @@ export class ToolsService {
 
   async getPurchaseInvoice(
     req: any,
-    query: { from: string; to: string},
+    query: { from: string; to: string },
   ): Promise<object> {
     const { from, to } = query;
     if (!from || !to) {
@@ -342,10 +343,10 @@ export class ToolsService {
 
   async callGetPurchaseInvoice<T>(token: string, url: string): Promise<T> {
     try {
-      
+
       let allInvoices: Invoice[] = [];
       let nextState: string | undefined = undefined;
-      
+
       do {
         const requestUrl = nextState ? url.replace('$state$', `&state=${nextState}`) : url.replace('$state$', '');
         Logger.log(`Fetching purchase invoices from URL: ${requestUrl}`);
@@ -398,5 +399,27 @@ export class ToolsService {
         },
       ] as T;
     }
+  }
+
+  async exportPurchaseInvoice(
+    req: any,
+    query: { from: string; to: string },
+  ): Promise<Buffer> {
+    const data: object = await this.getPurchaseInvoice(req, query);
+    const dataExport = [
+      ...(data['invoiceIssuedData']),
+      ...(data['invoiceNoCodeData']),
+      ...(data['invoiceCashRegisterData']),
+    ].map((item, index) => ({
+      ...item,
+      stt: index + 1,
+      ttcktmai: item?.ttcktmai || 0,
+      tgtphi: item?.tgtphi || 0,
+    }));
+    return await this.excelService.exportJSONToExcelBuffer(
+      dataExport,
+      TEMPLATE_EXPORT_INVOICE,
+      ['tgtcthue', 'tgtthue', 'ttcktmai', 'tgtphi', 'tgtttbso']
+    );
   }
 }

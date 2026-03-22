@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 @Injectable()
 export class ExcelService {
@@ -54,4 +55,61 @@ export class ExcelService {
 
     return result;
   }
+
+  async exportJSONToExcelBuffer(
+  data: any[],
+  header: Record<string, string>,
+  currencyFields: string[] = [] 
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Sheet1');
+
+  const keys = Object.keys(header);
+
+  worksheet.columns = keys.map((key) => ({
+    header: header[key],
+    key: key,
+    width: 20,
+  }));
+
+  worksheet.addRows(data);
+
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell, colNumber) => {
+      const columnKey = keys[colNumber - 1];
+
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+
+      if (rowNumber > 1 && currencyFields.includes(columnKey)) {
+        cell.numFmt = '#,##0';
+      }
+    });
+  });
+
+  worksheet.getRow(1).eachCell((cell) => {
+    cell.font = { bold: true };
+  });
+
+  const MAX_WIDTH = 60;
+
+  worksheet.columns.forEach((column, colIndex) => {
+    let maxLength = 10;
+
+    column.eachCell?.((cell) => {
+      const val = cell.value ? cell.value.toString() : '';
+      maxLength = Math.max(maxLength, val.length);
+    });
+
+    column.width = Math.min(maxLength + 2, MAX_WIDTH);
+  });
+
+  // Freeze header
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
 }

@@ -6,12 +6,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { ToolsService } from './tools.service';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import * as requests from 'src/requests';
+import type { Response } from 'express';
 
 @Controller('module')
 export class ToolsController {
@@ -59,5 +61,34 @@ export class ToolsController {
     @Req() req: Request,
   ): object {
     return this.toolsService.getPurchaseInvoice(req, query);
+  }
+
+  @Get('exportPurchaseInvoice')
+  @HttpCode(200)
+  async exportPurchaseInvoice(
+    @Query() query: { from: string; to: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.toolsService.exportPurchaseInvoice(req, query);
+
+    const fileName = `hoa-don-mua-${req['user']['usernameInvoice']}-${query.from}-${query.to}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'Content-Disposition',
+    );
+
+    res.setHeader('Content-Length', buffer.length);
+
+    return res.send(buffer);
   }
 }
