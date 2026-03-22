@@ -55,7 +55,7 @@ export class ToolsController {
   @Get('getPurchaseInvoice')
   @HttpCode(200)
   getPurchaseInvoice(
-    @Query() query: { from: string; to: string; size: number },
+    @Query() query: { from: string; to: string },
     @Req() req: Request,
   ): object {
     return this.toolsService.getPurchaseInvoice(req, query);

@@ -300,16 +300,16 @@ export class ToolsService {
 
   async getPurchaseInvoice(
     req: any,
-    query: { from: string; to: string; size: number },
+    query: { from: string; to: string},
   ): Promise<object> {
-    const { from, to, size } = query;
-    if (!from || !to || !size) {
+    const { from, to } = query;
+    if (!from || !to) {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
 
     const { usernameInvoice, ckey } = req['user'];
     const key = `invoice_${usernameInvoice}`;
-    const cacheKey = `${usernameInvoice}_${from}_${to}_${size}`;
+    const cacheKey = `${usernameInvoice}_${from}_${to}`;
     let dataCache = await this.redisService.get(cacheKey);
     if (dataCache) {
       return JSON.parse(dataCache);
@@ -322,18 +322,12 @@ export class ToolsService {
 
     // return mockInvoiceData;
 
-    const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=${size}&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
-    const invoiceIssuedDataRes: any[] = await this.callGetPurchaseInvoice<
-      any[]
-    >(tokenInvoice, urlInvoiceIssued);
-    const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=${size}&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
-    const invoiceNoCodeDataRes: any[] = await this.callGetPurchaseInvoice<
-      any[]
-    >(tokenInvoice, urlInvoiceNoCode);
-    const invoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=${size}&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    const invoiceCashRegisterDataRes: any[] = await this.callGetPurchaseInvoice<
-      any[]
-    >(tokenInvoice, invoiceCashRegister);
+    const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
+    const invoiceIssuedDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, urlInvoiceIssued);
+    const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
+    const invoiceNoCodeDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, urlInvoiceNoCode);
+    const invoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
+    const invoiceCashRegisterDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, invoiceCashRegister);
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -348,17 +342,30 @@ export class ToolsService {
 
   async callGetPurchaseInvoice<T>(token: string, url: string): Promise<T> {
     try {
-      Logger.log(`Fetching purchase invoices from URL: ${url}`);
-      const invoiceRes = await axios.get(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        timeout: 5000,
-      });
+      
+      let allInvoices: Invoice[] = [];
+      let nextState: string | undefined = undefined;
+      
+      do {
+        const requestUrl = nextState ? url.replace('$state$', `&state=${nextState}`) : url.replace('$state$', '');
+        Logger.log(`Fetching purchase invoices from URL: ${requestUrl}`);
 
-      const invoiceData: Invoice[] = invoiceRes?.data?.datas || [];
-      if (invoiceData.length > 0) {
-        return invoiceData.map((invoice: Invoice, index: number) => ({
+        const res = await axios.get(requestUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: 5000,
+        });
+
+        const data: Invoice[] = res?.data?.datas || [];
+        nextState = res?.data?.state;
+
+        allInvoices.push(...data);
+
+      } while (nextState);
+
+      if (allInvoices.length > 0) {
+        return allInvoices.map((invoice: Invoice, index: number) => ({
           stt: index + 1,
           khmshdon: invoice.khmshdon,
           khhdon: invoice.khhdon,
