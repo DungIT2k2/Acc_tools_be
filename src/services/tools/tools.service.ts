@@ -308,8 +308,54 @@ export class ToolsService {
     if (!from || !to) {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
+    const froms = from.trim().split(',');
+    const tos = to.trim().split(',');
+    if (froms.length < 1 || tos.length < 1 || froms.length !== tos.length) {
+      throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
+    }
 
-    const { usernameInvoice, ckey } = req['user'];
+    const usernameInvoice = req['user']['usernameInvoice'];
+    const dataRes = { invoiceIssuedData: [] as any[], invoiceNoCodeData: [] as any[], invoiceCashRegisterData: [] as any[] };
+    for (let index = 0; index < froms.length; index++) {
+      const fromDate = froms[index];
+      const toDate = tos[index];
+      const from = moment(fromDate, 'DD/MM/YYYY', true);
+      const to = moment(toDate, 'DD/MM/YYYY', true);
+
+      if (!from.isValid() || !to.isValid() || from.month() !== to.month() || from.year() !== to.year() || from.isAfter(to)) {
+        throw new HttpException('Invalid date format', HttpStatus.BAD_REQUEST);
+      }
+      const data = await this.getOneMonthPurchaseInvoice(
+        usernameInvoice,
+        fromDate,
+        toDate,
+        index === froms.length - 1
+      );
+      if (data['invoiceIssuedData'] && data['invoiceNoCodeData'] && data['invoiceCashRegisterData']) {
+        dataRes['invoiceIssuedData'] = [
+          ...dataRes['invoiceIssuedData'],
+          ...data['invoiceIssuedData']
+        ];
+        dataRes['invoiceNoCodeData'] = [
+          ...dataRes['invoiceNoCodeData'],
+          ...data['invoiceNoCodeData']
+        ];
+        dataRes['invoiceCashRegisterData'] = [
+          ...dataRes['invoiceCashRegisterData'],
+          ...data['invoiceCashRegisterData']
+        ];
+      }
+
+    }
+    return dataRes;
+  }
+
+  async getOneMonthPurchaseInvoice(
+    usernameInvoice: string,
+    from: string,
+    to: string,
+    lastWait = false,
+  ): Promise<object> {
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `${usernameInvoice}_${from}_${to}`;
     let dataCache = await this.redisService.get(cacheKey);
@@ -322,14 +368,12 @@ export class ToolsService {
 
     const tokenInvoice = JSON.parse(token)?.tokenInvoice;
 
-    // return mockInvoiceData;
-
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
     const invoiceIssuedDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, urlInvoiceIssued);
     const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
     const invoiceNoCodeDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, urlInvoiceNoCode);
     const invoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    const invoiceCashRegisterDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, invoiceCashRegister);
+    const invoiceCashRegisterDataRes: any[] = await this.callGetPurchaseInvoice<any[]>(tokenInvoice, invoiceCashRegister, true);
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -337,12 +381,14 @@ export class ToolsService {
       invoiceCashRegisterData: invoiceCashRegisterDataRes,
     }
 
-    await this.redisService.set(cacheKey, JSON.stringify(dataRes), 24 * 60 * 60 * 3);
-
+    await this.redisService.set(cacheKey, JSON.stringify(dataRes), 24 * 60 * 60 * 2);
+    if (!lastWait) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
     return dataRes;
   }
 
-  async callGetPurchaseInvoice<T>(token: string, url: string): Promise<T> {
+  async callGetPurchaseInvoice<T>(token: string, url: string, lastWait = false): Promise<T> {
     try {
 
       let allInvoices: Invoice[] = [];
@@ -363,10 +409,15 @@ export class ToolsService {
         nextState = res?.data?.state;
 
         allInvoices.push(...data);
-
+        if (nextState) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       } while (nextState);
 
       if (allInvoices.length > 0) {
+        if (!lastWait) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
         return allInvoices.map((invoice: Invoice, index: number) => ({
           stt: index + 1,
           khmshdon: invoice.khmshdon,
