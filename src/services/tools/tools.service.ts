@@ -418,26 +418,39 @@ export class ToolsService {
         if (!lastWait) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        return allInvoices.map((invoice: Invoice, index: number) => ({
-          stt: index + 1,
-          khmshdon: invoice.khmshdon,
-          khhdon: invoice.khhdon,
-          shdon: invoice.shdon,
-          tdlap: moment(invoice.tdlap).format('DD/MM/YYYY'),
-          nbmst: invoice.nbmst,
-          nbten: invoice.nbten,
-          tgtcthue: invoice.tgtcthue,
-          tgtthue: invoice.tgtthue,
-          ttcktmai: invoice.ttcktmai,
-          tgtphi: invoice?.tgtphi,
-          tgtttbso: invoice.tgtttbso,
-          tthai:
-            invoice.tthai == 1
-              ? 'Hóa đơn mới'
-              : invoice.tthai == 2
-                ? 'Hóa đơn thay thế'
-                : invoice.tthai,
-        })) as T;
+        return allInvoices
+          .filter((invoice: Invoice) =>
+            !invoice?.nbten?.toUpperCase().includes('NGÂN HÀNG')
+          )
+          .map((invoice: Invoice, index: number) => ({
+            stt: index + 1,
+            khmshdon: invoice.khmshdon,
+            khhdon: invoice.khhdon,
+            shdon: invoice.shdon,
+            tdlap: moment(invoice.tdlap).format('DD/MM/YYYY'),
+            nbmst: invoice.nbmst,
+            nbten: invoice.nbten,
+            tgtcthue: invoice.tgtcthue,
+            tgtthue: invoice.tgtthue,
+            ttcktmai: invoice.ttcktmai,
+            tgtphi: invoice?.tgtphi,
+            tgtttbso: invoice.tgtttbso,
+            tthai:
+              invoice.tthai == 1
+                ? 'Hóa đơn mới'
+                : invoice.tthai == 2
+                  ? 'Hóa đơn thay thế'
+                  : invoice.tthai == 3 ?
+                    'Hóa đơn điều chỉnh'
+                    : invoice.tthai == 5
+                      ? 'Hóa đơn đã bị điều chỉnh'
+                      : invoice.tthai,
+            nmdchi: invoice.nmdchi,
+            nmten: invoice.nmten,
+            khmshdgoc: invoice.khmshdgoc,
+            khhdgoc: invoice.khhdgoc,
+            shdgoc: invoice.shdgoc,
+          })) as T;
       }
       return [] as T;
     } catch (error) {
@@ -453,29 +466,41 @@ export class ToolsService {
     }
   }
 
-  async exportPurchaseInvoice(
-    req: any,
-    query: { from: string; to: string },
-  ): Promise<Buffer> {
-    const data: object = await this.getPurchaseInvoice(req, query);
-    const dataExport = [
-      ...(data['invoiceIssuedData']),
-      ...(data['invoiceNoCodeData']),
-      ...(data['invoiceCashRegisterData']),
+  async mergeInvoiceData(data: object): Promise<InvoiceData[]> {
+    const { invoiceIssuedData, invoiceNoCodeData, invoiceCashRegisterData } = data as any;
+    const dataMerged = [
+      ...invoiceIssuedData,
+      ...invoiceNoCodeData,
+      ...invoiceCashRegisterData,
     ]
       .sort((a, b) => {
         const dateA = parseDate(a?.tdlap);
         const dateB = parseDate(b?.tdlap);
         return dateA - dateB;
       })
-      .map((item, index) => ({
-        ...item,
-        stt: index + 1,
-        tgtthue: item?.tgtthue || 0,
-        ttcktmai: item?.ttcktmai || 0,
-        tgtphi: item?.tgtphi || 0,
-        tgtcthue: !item?.tgtcthue ? item?.tgtttbso : item?.tgtcthue,
-      }));
+      .map((item, index) => {
+        const tgtphi = item?.tgtphi || 0;
+        const baseTgtcthue = !item?.tgtcthue ? item?.tgtttbso : item?.tgtcthue;
+
+        return {
+          ...item,
+          stt: index + 1,
+          tgtthue: item?.tgtthue || 0,
+          ttcktmai: item?.ttcktmai || 0,
+          tgtphi,
+          tgtcthue: baseTgtcthue + tgtphi,
+        };
+      });
+
+    return dataMerged;
+  }
+
+  async exportPurchaseInvoice(
+    req: any,
+    query: { from: string; to: string },
+  ): Promise<Buffer> {
+    const data: object = await this.getPurchaseInvoice(req, query);
+    const dataExport = await this.mergeInvoiceData(data);
     return await this.excelService.exportJSONToExcelBuffer(
       dataExport,
       TEMPLATE_EXPORT_INVOICE,
@@ -500,24 +525,7 @@ export class ToolsService {
       throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
     const myFileBuffer = myFile?.buffer;
 
-    const taxData: InvoiceData[] = [
-      ...(data['invoiceIssuedData']),
-      ...(data['invoiceNoCodeData']),
-      ...(data['invoiceCashRegisterData']),
-    ]
-      .sort((a, b) => {
-        const dateA = parseDate(a?.tdlap);
-        const dateB = parseDate(b?.tdlap);
-        return dateA - dateB;
-      })
-      .map((item, index) => ({
-        ...item,
-        stt: index + 1,
-        tgtthue: item?.tgtthue || 0,
-        ttcktmai: item?.ttcktmai || 0,
-        tgtphi: item?.tgtphi || 0,
-        tgtcthue: !item?.tgtcthue ? item?.tgtttbso : item?.tgtcthue,
-      }));
+    const taxData: InvoiceData[] = await this.mergeInvoiceData(data);
     const myData: UserInvoiceData[] =
       await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
@@ -535,6 +543,9 @@ export class ToolsService {
       if (!stt) {
         taxErrorArr.push({
           row: 'Không xác định',
+          shd: 'Không xác định',
+          tdlap: 'Không xác định',
+          serihd: 'Không xác định',
           description: 'Có STT không hợp lệ',
         });
         continue;
@@ -543,9 +554,14 @@ export class ToolsService {
       const khhd = tax?.khhdon?.trim();
       const shd = tax?.shdon;
       const mst = tax?.nbmst?.trim();
+      const tdlap = tax?.tdlap;
+      const serihd = `${khms}${khhd}`;
       if (!khms) {
         taxErrorArr.push({
           row: stt,
+          shd,
+          tdlap,
+          serihd,
           description: 'Ký hiệu mẫu số không hợp lệ',
         });
         continue;
@@ -553,25 +569,34 @@ export class ToolsService {
       if (!khhd) {
         taxErrorArr.push({
           row: stt,
+          shd,
+          tdlap,
+          serihd,
           description: 'Ký hiệu hóa đơn không hợp lệ',
         });
         continue;
       }
       if (!shd) {
-        taxErrorArr.push({ row: stt, description: 'Số hóa đơn không hợp lệ' });
+        taxErrorArr.push({ row: stt, shd, tdlap, serihd, description: 'Số hóa đơn không hợp lệ' });
         continue;
       }
       if (!mst) {
         taxErrorArr.push({
           row: stt,
+          shd,
+          tdlap,
+          serihd,
           description: 'MST người bán không hợp lệ',
         });
         continue;
       }
-      if (tax.tthai !== 1) {
+      if (tax.tthai !== 'Hóa đơn mới' && tax.tthai !== 'Hóa đơn thay thế') {
         taxErrorArr.push({
           row: stt,
-          description: `Hóa đơn không phải là hóa đơn mới`,
+          shd,
+          tdlap,
+          serihd,
+          description: `Hóa đơn không phải là hóa đơn mới hoặc bị thay thế`,
         });
         continue;
       }
@@ -584,6 +609,9 @@ export class ToolsService {
       if (!stt && stt !== 0) {
         myErrorArr.push({
           row: 'Không xác định',
+          shd: 'Không xác định',
+          tdlap: 'Không xác định',
+          serihd: 'Không xác định',
           description: 'Có STT không hợp lệ',
         });
         continue;
@@ -591,18 +619,22 @@ export class ToolsService {
       const serihd = data.serihd?.trim();
       const sohd = Number(data.sohd?.trim()).toString();
       const masothue = data.masothue?.trim();
+      const nghdchr = data.nghdchr;
 
       if (!serihd) {
-        myErrorArr.push({ row: stt, description: 'Seri hóa đơn không hợp lệ' });
+        myErrorArr.push({ row: stt, shd: sohd, tdlap: nghdchr, serihd, description: 'Seri hóa đơn không hợp lệ' });
         continue;
       }
       if (!sohd) {
-        myErrorArr.push({ row: stt, description: 'Số hóa đơn không hợp lệ' });
+        myErrorArr.push({ row: stt, shd: sohd, tdlap: nghdchr, serihd, description: 'Số hóa đơn không hợp lệ' });
         continue;
       }
       if (!masothue) {
         myErrorArr.push({
           row: stt,
+          shd: sohd,
+          tdlap: nghdchr,
+          serihd,
           description: 'MST người bán không hợp lệ',
         });
         continue;
@@ -619,23 +651,45 @@ export class ToolsService {
         const nghdchr = data.nghdchr;
         const sotien_net = data.sotien_net;
         const sotien_tax = data.sotien_tax;
+        if (matchData.tthai == 'Hóa đơn thay thế') {
+          const key = `${matchData.khmshdgoc}${matchData.khhdgoc}${matchData.shdgoc}${matchData.nbmst}`;
+          if (!taxDataMap.has(key)) {
+            myErrorArr.push({
+              row: stt,
+              shd: sohd,
+              tdlap: nghdchr,
+              serihd,
+              description: `Không tìm thấy hóa đơn bị thay thế tương ứng với hóa đơn thay thế này trong dữ liệu so sánh`,
+            });
+            success = false;
+          }
+        }
         if (nghdchr != matchData.tdlap) {
           myErrorArr.push({
             row: stt,
+            shd: sohd,
+            tdlap: nghdchr,
+            serihd,
             description: `Ngày lập không khớp với dữ liệu so sánh`,
           });
           success = false;
         }
-        if (sotien_net != matchData.tgtcthue) {
+        if (sotien_net != Math.round(matchData.tgtcthue)) {
           myErrorArr.push({
             row: stt,
+            shd: sohd,
+            tdlap: nghdchr,
+            serihd,
             description: `Tổng tiền chưa thuế không khớp với dữ liệu so sánh`,
           });
           success = false;
         }
-        if (sotien_tax != matchData.tgtthue) {
+        if (sotien_tax != Math.round(matchData.tgtthue)) {
           myErrorArr.push({
             row: stt,
+            shd: sohd,
+            tdlap: nghdchr,
+            serihd,
             description: `Tổng tiền thuế không khớp với dữ liệu so sánh`,
           });
           success = false;
@@ -646,6 +700,9 @@ export class ToolsService {
           } else {
             myErrorArr.push({
               row: stt,
+              shd: sohd,
+              tdlap: nghdchr,
+              serihd,
               description: `Trùng với dòng số ${mySuccessArr.get(key)}`,
             });
           }
@@ -657,6 +714,9 @@ export class ToolsService {
         Logger.warn(`[${stt}] No match found key ${key} in tax data map`);
         myErrorArr.push({
           row: stt,
+          shd: sohd,
+          tdlap: nghdchr,
+          serihd,
           description: 'Không tìm thấy dữ liệu hóa đơn khớp với dữ liệu so sánh',
         });
       }
@@ -667,9 +727,12 @@ export class ToolsService {
     taxDataMap.forEach((value) => {
       taxErrorArr.push({
         row: value.stt,
+        shd: value.shdon,
+        tdlap: value.tdlap,
+        serihd: `${value.khmshdon}${value.khhdon}`,
         description: 'Không tìm thấy dữ liệu hóa đơn khớp với file của bạn',
       });
-    });
+  });
 
     return { myErrorArr, taxErrorArr };
   }

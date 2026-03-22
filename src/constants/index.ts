@@ -12,4 +12,9 @@ export const TEMPLATE_EXPORT_INVOICE = {
   tgtphi: "Tổng tiền Phí",
   tgtttbso: "Tổng tiền thanh toán",
   tthai: "Trạng thái hoá đơn",
+  nmdchi: "Địa chỉ người mua",
+  nmten: "Tên người mua",
+  khmshdgoc: "Ký hiệu mẫu số hóa đơn gốc",
+  khhdgoc: "Ký hiệu hóa đơn gốc",
+  shdgoc: "Số hóa đơn gốc",
 }
