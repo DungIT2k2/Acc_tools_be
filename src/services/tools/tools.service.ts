@@ -474,7 +474,7 @@ export class ToolsService {
         tgtthue: item?.tgtthue || 0,
         ttcktmai: item?.ttcktmai || 0,
         tgtphi: item?.tgtphi || 0,
-        tgtttbso: !item?.tgtttbso ? item?.tgtcthue : item?.tgtttbso,
+        tgtcthue: !item?.tgtcthue ? item?.tgtttbso : item?.tgtcthue,
       }));
     return await this.excelService.exportJSONToExcelBuffer(
       dataExport,
