@@ -72,7 +72,10 @@ export class ToolsController {
   ) {
     const buffer = await this.toolsService.exportPurchaseInvoice(req, query);
 
-    const fileName = `hoa-don-mua-${req['user']['usernameInvoice']}-${query.from}-${query.to}.xlsx`;
+    const firstDate = query.from.split(',')[0];
+    const lastDate = query.from.split(',')[query.from.split(',').length - 1];
+    
+    const fileName = `hoa-don-mua-${req['user']['usernameInvoice']}-${firstDate}-${lastDate}.xlsx`;
 
     res.setHeader(
       'Content-Type',
