@@ -17,7 +17,7 @@ export class ToolsService {
     private readonly excelService: ExcelService,
     private readonly authService: AuthService,
     private readonly redisService: RedisService,
-  ) { }
+  ) {}
   async handle(files: any): Promise<object> {
     const taxFile = files?.taxFile?.[0];
     const myFile = files?.myFile?.[0];
@@ -240,7 +240,6 @@ export class ToolsService {
         );
       }
 
-
       if (!token)
         throw new HttpException(
           'Đăng nhập hoá đơn điện tử thất bại',
@@ -264,10 +263,14 @@ export class ToolsService {
         );
       }
 
-      this.redisService.set(keyRedis, JSON.stringify({
-        tokenInvoice: token,
-        fullName,
-      }), 24 * 60 * 60);
+      this.redisService.set(
+        keyRedis,
+        JSON.stringify({
+          tokenInvoice: token,
+          fullName,
+        }),
+        24 * 60 * 60,
+      );
     }
 
     const authorization = req['headers']['authorization'].split(' ')[1];
@@ -315,37 +318,50 @@ export class ToolsService {
     }
 
     const usernameInvoice = req['user']['usernameInvoice'];
-    const dataRes = { invoiceIssuedData: [] as any[], invoiceNoCodeData: [] as any[], invoiceCashRegisterData: [] as any[] };
+    const dataRes = {
+      invoiceIssuedData: [] as any[],
+      invoiceNoCodeData: [] as any[],
+      invoiceCashRegisterData: [] as any[],
+    };
     for (let index = 0; index < froms.length; index++) {
       const fromDate = froms[index];
       const toDate = tos[index];
       const from = moment(fromDate, 'DD/MM/YYYY', true);
       const to = moment(toDate, 'DD/MM/YYYY', true);
 
-      if (!from.isValid() || !to.isValid() || from.month() !== to.month() || from.year() !== to.year() || from.isAfter(to)) {
+      if (
+        !from.isValid() ||
+        !to.isValid() ||
+        from.month() !== to.month() ||
+        from.year() !== to.year() ||
+        from.isAfter(to)
+      ) {
         throw new HttpException('Invalid date format', HttpStatus.BAD_REQUEST);
       }
       const data = await this.getOneMonthPurchaseInvoice(
         usernameInvoice,
         fromDate,
         toDate,
-        index === froms.length - 1
+        index === froms.length - 1,
       );
-      if (data['invoiceIssuedData'] && data['invoiceNoCodeData'] && data['invoiceCashRegisterData']) {
+      if (
+        data['invoiceIssuedData'] &&
+        data['invoiceNoCodeData'] &&
+        data['invoiceCashRegisterData']
+      ) {
         dataRes['invoiceIssuedData'] = [
           ...dataRes['invoiceIssuedData'],
-          ...data['invoiceIssuedData']
+          ...data['invoiceIssuedData'],
         ];
         dataRes['invoiceNoCodeData'] = [
           ...dataRes['invoiceNoCodeData'],
-          ...data['invoiceNoCodeData']
+          ...data['invoiceNoCodeData'],
         ];
         dataRes['invoiceCashRegisterData'] = [
           ...dataRes['invoiceCashRegisterData'],
-          ...data['invoiceCashRegisterData']
+          ...data['invoiceCashRegisterData'],
         ];
       }
-
     }
     return dataRes;
   }
@@ -369,33 +385,55 @@ export class ToolsService {
     const tokenInvoice = JSON.parse(token)?.tokenInvoice;
 
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
-    const invoiceIssuedDataRes: InvoiceData[] = await this.callGetPurchaseInvoice<InvoiceData[]>(tokenInvoice, urlInvoiceIssued);
+    const invoiceIssuedDataRes: InvoiceData[] =
+      await this.callGetPurchaseInvoice<InvoiceData[]>(
+        tokenInvoice,
+        urlInvoiceIssued,
+      );
     const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
-    const invoiceNoCodeDataRes: InvoiceData[] = await this.callGetPurchaseInvoice<InvoiceData[]>(tokenInvoice, urlInvoiceNoCode);
+    const invoiceNoCodeDataRes: InvoiceData[] =
+      await this.callGetPurchaseInvoice<InvoiceData[]>(
+        tokenInvoice,
+        urlInvoiceNoCode,
+      );
     const invoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    const invoiceCashRegisterDataRes: InvoiceData[] = await this.callGetPurchaseInvoice<InvoiceData[]>(tokenInvoice, invoiceCashRegister, true);
+    const invoiceCashRegisterDataRes: InvoiceData[] =
+      await this.callGetPurchaseInvoice<InvoiceData[]>(
+        tokenInvoice,
+        invoiceCashRegister,
+        true,
+      );
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
       invoiceNoCodeData: invoiceNoCodeDataRes,
       invoiceCashRegisterData: invoiceCashRegisterDataRes,
-    }
+    };
 
-    await this.redisService.set(cacheKey, JSON.stringify(dataRes), 24 * 60 * 60 * 2);
+    await this.redisService.set(
+      cacheKey,
+      JSON.stringify(dataRes),
+      24 * 60 * 60 * 2,
+    );
     if (!lastWait) {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
     return dataRes;
   }
 
-  async callGetPurchaseInvoice<T>(token: string, url: string, lastWait = false): Promise<T> {
+  async callGetPurchaseInvoice<T>(
+    token: string,
+    url: string,
+    lastWait = false,
+  ): Promise<T> {
     try {
-
       let allInvoices: Invoice[] = [];
       let nextState: string | undefined = undefined;
 
       do {
-        const requestUrl = nextState ? url.replace('$state$', `&state=${nextState}`) : url.replace('$state$', '');
+        const requestUrl = nextState
+          ? url.replace('$state$', `&state=${nextState}`)
+          : url.replace('$state$', '');
         Logger.log(`Fetching purchase invoices from URL: ${requestUrl}`);
 
         const res = await axios.get(requestUrl, {
@@ -410,17 +448,18 @@ export class ToolsService {
 
         allInvoices.push(...data);
         if (nextState) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       } while (nextState);
 
       if (allInvoices.length > 0) {
         if (!lastWait) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
         return allInvoices
-          .filter((invoice: Invoice) =>
-            !invoice?.nbten?.toUpperCase().includes('NGÂN HÀNG')
+          .filter(
+            (invoice: Invoice) =>
+              !invoice?.nbten?.toUpperCase().includes('NGÂN HÀNG'),
           )
           .map((invoice: Invoice, index: number) => ({
             stt: index + 1,
@@ -440,8 +479,8 @@ export class ToolsService {
                 ? 'Hóa đơn mới'
                 : invoice.tthai == 2
                   ? 'Hóa đơn thay thế'
-                  : invoice.tthai == 3 ?
-                    'Hóa đơn điều chỉnh'
+                  : invoice.tthai == 3
+                    ? 'Hóa đơn điều chỉnh'
                     : invoice.tthai == 5
                       ? 'Hóa đơn đã bị điều chỉnh'
                       : invoice.tthai,
@@ -467,7 +506,8 @@ export class ToolsService {
   }
 
   async mergeInvoiceData(data: object): Promise<InvoiceData[]> {
-    const { invoiceIssuedData, invoiceNoCodeData, invoiceCashRegisterData } = data as any;
+    const { invoiceIssuedData, invoiceNoCodeData, invoiceCashRegisterData } =
+      data as any;
     const dataMerged = [
       ...invoiceIssuedData,
       ...invoiceNoCodeData,
@@ -504,11 +544,15 @@ export class ToolsService {
     return await this.excelService.exportJSONToExcelBuffer(
       dataExport,
       TEMPLATE_EXPORT_INVOICE,
-      ['tgtcthue', 'tgtthue', 'ttcktmai', 'tgtphi', 'tgtttbso']
+      ['tgtcthue', 'tgtthue', 'ttcktmai', 'tgtphi', 'tgtttbso'],
     );
   }
 
-  async comparePurchaseInvoice(files: any, formData: { from: string; to: string }, req: any): Promise<object> {
+  async comparePurchaseInvoice(
+    files: any,
+    formData: { from: string; to: string },
+    req: any,
+  ): Promise<object> {
     const { from, to } = formData;
     const myFile = files?.File?.[0];
 
@@ -518,10 +562,7 @@ export class ToolsService {
       throw new HttpException('Vui lòng import file', HttpStatus.BAD_REQUEST);
     const myFileName = myFile?.originalname;
 
-    if (
-      !myFileName ||
-      !myFileName.includes('.xlsx')
-    )
+    if (!myFileName || !myFileName.includes('.xlsx'))
       throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
     const myFileBuffer = myFile?.buffer;
 
@@ -537,6 +578,7 @@ export class ToolsService {
     const mySuccessArr = new Map();
     const taxSuccessArr: string[] = [];
     const taxDataMap = new Map<string, InvoiceData>();
+    const myDataMap = new Map<string, UserInvoiceData>();
 
     for (const tax of taxData) {
       const stt = tax?.stt;
@@ -577,7 +619,13 @@ export class ToolsService {
         continue;
       }
       if (!shd) {
-        taxErrorArr.push({ row: stt, shd, tdlap, serihd, description: 'Số hóa đơn không hợp lệ' });
+        taxErrorArr.push({
+          row: stt,
+          shd,
+          tdlap,
+          serihd,
+          description: 'Số hóa đơn không hợp lệ',
+        });
         continue;
       }
       if (!mst) {
@@ -590,7 +638,12 @@ export class ToolsService {
         });
         continue;
       }
-      if (tax.tthai !== 'Hóa đơn mới' && tax.tthai !== 'Hóa đơn thay thế') {
+      if (
+        tax.tthai !== 'Hóa đơn mới' &&
+        tax.tthai !== 'Hóa đơn thay thế' &&
+        tax.tthai !== 'Hóa đơn điều chỉnh' &&
+        tax.tthai !== 'Hóa đơn đã bị điều chỉnh'
+      ) {
         taxErrorArr.push({
           row: stt,
           shd,
@@ -622,11 +675,23 @@ export class ToolsService {
       const nghdchr = data.nghdchr;
 
       if (!serihd) {
-        myErrorArr.push({ row: stt, shd: sohd, tdlap: nghdchr, serihd, description: 'Seri hóa đơn không hợp lệ' });
+        myErrorArr.push({
+          row: stt,
+          shd: sohd,
+          tdlap: nghdchr,
+          serihd,
+          description: 'Seri hóa đơn không hợp lệ',
+        });
         continue;
       }
       if (!sohd) {
-        myErrorArr.push({ row: stt, shd: sohd, tdlap: nghdchr, serihd, description: 'Số hóa đơn không hợp lệ' });
+        myErrorArr.push({
+          row: stt,
+          shd: sohd,
+          tdlap: nghdchr,
+          serihd,
+          description: 'Số hóa đơn không hợp lệ',
+        });
         continue;
       }
       if (!masothue) {
@@ -641,9 +706,10 @@ export class ToolsService {
       }
 
       const key = `${serihd}${sohd}${masothue}`;
+      myDataMap.set(key, data);
 
       Logger.log(`[${stt}] Find key ${key} in tax data map`);
-      const matchData = taxDataMap.get(key);
+      let matchData = taxDataMap.get(key);
 
       if (matchData) {
         // Logger.log(`Found matching data: ${JSON.stringify(matchData)}`)
@@ -651,19 +717,26 @@ export class ToolsService {
         const nghdchr = data.nghdchr;
         const sotien_net = data.sotien_net;
         const sotien_tax = data.sotien_tax;
-        if (matchData.tthai == 'Hóa đơn thay thế') {
-          const key = `${matchData.khmshdgoc}${matchData.khhdgoc}${matchData.shdgoc}${matchData.nbmst}`;
-          if (!taxDataMap.has(key)) {
-            myErrorArr.push({
-              row: stt,
-              shd: sohd,
-              tdlap: nghdchr,
-              serihd,
-              description: `Không tìm thấy hóa đơn bị thay thế tương ứng với hóa đơn thay thế này trong dữ liệu so sánh`,
-            });
-            success = false;
-          }
+        if (
+          matchData.tthai == 'Hóa đơn điều chỉnh' ||
+          matchData.tthai == 'Hóa đơn đã bị điều chỉnh'
+        ) {
+          continue;
         }
+        // if (matchData.tthai == 'Hóa đơn thay thế') {
+        // const key = `${matchData.khmshdgoc}${matchData.khhdgoc}${matchData.shdgoc}${matchData.nbmst}`;
+        // if (taxDataMap.has(key)) {
+        //   matchData = taxDataMap.get(key) as InvoiceData;
+        // myErrorArr.push({
+        //   row: stt,
+        //   shd: sohd,
+        //   tdlap: nghdchr,
+        //   serihd,
+        //   description: `Không tìm thấy hóa đơn bị thay thế tương ứng với hóa đơn thay thế này trong dữ liệu so sánh`,
+        // });
+        // success = false;
+        // }
+        // }
         if (nghdchr != matchData.tdlap) {
           myErrorArr.push({
             row: stt,
@@ -717,13 +790,99 @@ export class ToolsService {
           shd: sohd,
           tdlap: nghdchr,
           serihd,
-          description: 'Không tìm thấy dữ liệu hóa đơn khớp với dữ liệu so sánh',
+          description:
+            'Không tìm thấy dữ liệu hóa đơn khớp với dữ liệu so sánh',
         });
       }
     }
+
+    //Xử lí tiếp các hóa đơn của file thuế
+    taxDataMap.forEach((taxData) => {
+      const taxKey = `${taxData.khmshdon}${taxData.khhdon}${taxData.shdon}${taxData.nbmst}`;
+      // Xử lí cho hóa đơn bằng 0 
+      if (
+        taxData.tgtcthue == 0 &&
+        taxData.tgtthue == 0 &&
+        taxData.ttcktmai == 0 &&
+        taxData.tgtphi == 0 &&
+        taxData.tgtttbso == 0
+      ) {
+        taxErrorArr.push({
+          row: taxData.stt,
+          shd: taxData.shdon,
+          tdlap: taxData.tdlap,
+          serihd: `${taxData.khmshdon}${taxData.khhdon}`,
+          description: `Hóa đơn có giá trị bằng 0`,
+        });
+        taxSuccessArr.push(taxKey);
+        return;
+      }
+      // Xử lí cho hóa đơn điều chỉnh
+      if (taxData.tthai == 'Hóa đơn điều chỉnh') {
+        const hdbdckey = `${taxData.khmshdgoc}${taxData.khhdgoc}${taxData.shdgoc}${taxData.nbmst}`; // Hóa đơn bị điều chỉnh
+        if (taxDataMap.has(hdbdckey)) {
+          const hdbdcData = taxDataMap.get(hdbdckey) as InvoiceData;
+          const total_tgtttbso = taxData.tgtttbso + hdbdcData.tgtttbso;
+          if (total_tgtttbso == 0) {
+            taxSuccessArr.push(taxKey);
+            taxSuccessArr.push(hdbdckey);
+            return;
+          }
+          if (myDataMap.has(hdbdckey)) {
+            const tlap = hdbdcData.tdlap;
+            const total_tgtcthue = taxData.tgtcthue + hdbdcData.tgtcthue;
+            const total_tgtthue = taxData.tgtthue + hdbdcData.tgtthue;
+
+            const myData = myDataMap.get(hdbdckey) as UserInvoiceData;
+            if (tlap != myData.nghdchr) {
+              myErrorArr.push({
+                row: myData.sott,
+                shd: myData.sohd,
+                tdlap: myData.nghdchr,
+                serihd: myData.serihd,
+                description: `Ngày lập không khớp với dữ liệu của hóa đơn bị điều chỉnh`,
+              });
+              return;
+            }
+            if (myData.sotien_net != total_tgtcthue) {
+              myErrorArr.push({
+                row: myData.sott,
+                shd: myData.sohd,
+                tdlap: myData.nghdchr,
+                serihd: myData.serihd,
+                description: `Tổng tiền chưa thuế không khớp với dữ liệu sau khi đã cộng trừ với hóa đơn điều chỉnh`,
+              });
+              return;
+            }
+            if (myData.sotien_tax != total_tgtthue) {
+              myErrorArr.push({
+                row: myData.sott,
+                shd: myData.sohd,
+                tdlap: myData.nghdchr,
+                serihd: myData.serihd,
+                description: `Tổng tiền thuế không khớp với dữ liệu sau khi đã cộng trừ với hóa đơn điều chỉnh`,
+              });
+              return;
+            }
+            taxSuccessArr.push(taxKey);
+            taxSuccessArr.push(hdbdckey);
+          } else {
+            taxErrorArr.push({
+              row: taxData.stt,
+              shd: taxData.shdon,
+              tdlap: taxData.tdlap,
+              serihd: `${taxData.khmshdon}${taxData.khhdon}`,
+              description: `Không tìm thấy hóa đơn tương ứng với hóa đơn bị điều chỉnh này trong file dữ liệu`,
+            });
+          }
+        }
+      }
+    });
+
     taxSuccessArr.forEach((key) => {
       taxDataMap.delete(key);
     });
+
     taxDataMap.forEach((value) => {
       taxErrorArr.push({
         row: value.stt,
@@ -732,7 +891,7 @@ export class ToolsService {
         serihd: `${value.khmshdon}${value.khhdon}`,
         description: 'Không tìm thấy dữ liệu hóa đơn khớp với file của bạn',
       });
-  });
+    });
 
     return { myErrorArr, taxErrorArr };
   }
