@@ -1,4 +1,4 @@
-export const TEMPLATE_EXPORT_INVOICE = {
+export const TEMPLATE_EXPORT_PURCHASE_INVOICE = {
   stt: "STT",
   khmshdon: "Ký hiệu mẫu số",
   khhdon: "Ký hiệu hóa đơn",
@@ -14,6 +14,24 @@ export const TEMPLATE_EXPORT_INVOICE = {
   tthai: "Trạng thái hoá đơn",
   nmdchi: "Địa chỉ người mua",
   nmten: "Tên người mua",
+  khmshdgoc: "Ký hiệu mẫu số hóa đơn gốc",
+  khhdgoc: "Ký hiệu hóa đơn gốc",
+  shdgoc: "Số hóa đơn gốc",
+}
+
+export const TEMPLATE_EXPORT_SOLD_INVOICE = {
+  stt: "STT",
+  khmshdon: "Ký hiệu mẫu số",
+  khhdon: "Ký hiệu hóa đơn",
+  shdon: "Số hoá đơn",
+  tdlap: "Ngày lập",
+  nmmst: "MST người mua",
+  nmten: "Tên người mua",
+  tgtcthue: "Tổng tiền trước thuế",
+  tgtthue: "Tổng tiền thuế",
+  ttcktmai: "Tổng tiền chiết khấu thương mại",
+  tgtttbso: "Tổng tiền thanh toán",
+  tthai: "Trạng thái hoá đơn",
   khmshdgoc: "Ký hiệu mẫu số hóa đơn gốc",
   khhdgoc: "Ký hiệu hóa đơn gốc",
   shdgoc: "Số hóa đơn gốc",

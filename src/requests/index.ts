@@ -33,6 +33,7 @@ export interface InvoiceData {
   tdlap: string; // Ngày lập
   nbmst: string; // MST người bán/MST người xuất hàng
   nbten: string; // Tên người bán/Tên người xuất hàng
+  nmmst: string; // MST người mua/MST người nhận hàng
   tgtcthue: number; // Tổng tiền chưa thuế
   tgtthue: number; // Tổng tiền thuế
   ttcktmai: number; // Tổng tiền chiết khấu thương mại
@@ -46,6 +47,9 @@ export interface InvoiceData {
   shdgoc: string | null; // Số hóa đơn gốc (nếu có)
 }
 
+export interface InvoiceSoldData extends Omit<InvoiceData, 'nbmst' | 'nbten' | 'tgtphi'> {}
+
+export interface InvoicePurchaseData extends Omit<InvoiceData, 'nmmst' | 'nmten'> {}
 export interface UserInvoiceData {
   sott: number;
   codehd: string;
@@ -69,7 +73,6 @@ export interface LogginInvoiceReq {
   ckey?: string;
   cvalue?: string;
 }
-
 
 export interface Invoice {
   stt: string;
@@ -119,6 +122,7 @@ export interface Invoice {
   nmmst: string;
   nmstkhoan: string | null;
   nmten: string;
+  nmtnmua: string;
 
   nmttkhac: [];
 
