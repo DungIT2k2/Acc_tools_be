@@ -4,13 +4,12 @@ import {
   InvoiceData,
   InvoicePurchaseData,
   InvoiceSoldData,
-  TaxFile,
   UserInvoiceData,
 } from 'src/requests';
 import { ExcelService } from '../excel/excel.service';
 import { AuthService } from '../auth/auth.service';
 import axios from 'axios';
-import moment from 'moment';
+import moment from 'moment-timezone';
 import { RedisService } from '../redis/redis.service';
 import { parseDate } from 'src/utils';
 
@@ -303,7 +302,9 @@ export class InvoiceService {
             khmshdon: invoice.khmshdon,
             khhdon: invoice.khhdon,
             shdon: invoice.shdon,
-            tdlap: moment(invoice.tdlap).format('DD/MM/YYYY'),
+            tdlap: moment(invoice.tdlap)
+              .tz('Asia/Ho_Chi_Minh')
+              .format('DD/MM/YYYY'),
             nbmst: invoice.nbmst,
             nbten: invoice.nbten,
             nmten: invoice.nmtnmua || invoice.nmten,
@@ -320,9 +321,11 @@ export class InvoiceService {
                   ? 'Hóa đơn thay thế'
                   : invoice.tthai == 3
                     ? 'Hóa đơn điều chỉnh'
-                    : invoice.tthai == 5
-                      ? 'Hóa đơn đã bị điều chỉnh'
-                      : invoice.tthai,
+                    : invoice.tthai == 4
+                      ? 'Hóa đơn đã bị thay thế'
+                      : invoice.tthai == 5
+                        ? 'Hóa đơn đã bị điều chỉnh'
+                        : invoice.tthai,
             nmdchi: invoice.nmdchi,
             khmshdgoc: invoice.khmshdgoc,
             khhdgoc: invoice.khhdgoc,
@@ -401,7 +404,8 @@ export class InvoiceService {
       throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
     const myFileBuffer = myFile?.buffer;
 
-    const taxData: InvoiceData[] = await this.mergeInvoiceData<InvoiceData>(data);
+    const taxData: InvoicePurchaseData[] =
+      await this.mergeInvoiceData<InvoicePurchaseData>(data);
     const myData: UserInvoiceData[] =
       await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
@@ -412,7 +416,10 @@ export class InvoiceService {
     const myErrorArr: object[] = [];
     const mySuccessArr = new Map();
     const taxSuccessArr: string[] = [];
-    const taxDataMap = new Map<string, InvoiceData>();
+    const taxDataNoMstMap = new Map<string, InvoicePurchaseData>();
+    const taxReplaceMap = new Map<string, string>();
+    const taxAdjustMap = new Map<string, string>();
+    const taxDataMap = new Map<string, InvoicePurchaseData>();
     const myDataMap = new Map<string, UserInvoiceData>();
 
     for (const tax of taxData) {
@@ -474,23 +481,90 @@ export class InvoiceService {
         continue;
       }
       if (
+        tax.tgtcthue == 0 &&
+        tax.tgtthue == 0 &&
+        tax.ttcktmai == 0 &&
+        tax.tgtphi == 0 &&
+        tax.tgtttbso == 0
+      ) {
+        taxErrorArr.push({
+          row: tax.stt,
+          shd: tax.shdon,
+          tdlap: tax.tdlap,
+          serihd: `${tax.khmshdon}${tax.khhdon}`,
+          description: `Hóa đơn có giá trị bằng 0`,
+        });
+        continue;
+      }
+      if (
         tax.tthai !== 'Hóa đơn mới' &&
         tax.tthai !== 'Hóa đơn thay thế' &&
         tax.tthai !== 'Hóa đơn điều chỉnh' &&
-        tax.tthai !== 'Hóa đơn đã bị điều chỉnh'
+        tax.tthai !== 'Hóa đơn đã bị điều chỉnh' &&
+        tax.tthai !== 'Hóa đơn đã bị thay thế'
       ) {
         taxErrorArr.push({
           row: stt,
           shd,
           tdlap,
           serihd,
-          description: `Hóa đơn không phải là hóa đơn mới hoặc bị thay thế`,
+          description: `Hóa đơn là loại chưa được hỗ trợ so sánh`,
         });
         continue;
       }
       const key = `${khms}${khhd}${shd}${mst}`;
+      const keyNoMst = `${khms}${khhd}${shd}`;
+      if (tax.tthai == 'Hóa đơn thay thế') {
+        const hdbttkey = `${tax.khmshdgoc}${tax.khhdgoc}${tax.shdgoc}`;
+        taxReplaceMap.set(keyNoMst, hdbttkey);
+      }
+      if (tax.tthai == 'Hóa đơn điều chỉnh') {
+        const hdbdckey = `${tax.khmshdgoc}${tax.khhdgoc}${tax.shdgoc}${tax.nbmst}`;
+        taxAdjustMap.set(key, hdbdckey);
+      }
       taxDataMap.set(key, tax);
+      taxDataNoMstMap.set(keyNoMst, tax);
     }
+
+    taxReplaceMap.forEach((hdbttkey, key) => {
+      if (taxDataNoMstMap.has(hdbttkey)) {
+        const replaceData = taxDataNoMstMap.get(key) as InvoicePurchaseData;
+        const hdbttData = taxDataNoMstMap.get(hdbttkey) as InvoicePurchaseData;
+        const keyReplace = `${replaceData.khmshdon}${replaceData.khhdon}${replaceData.shdon}${replaceData.nbmst}`;
+        const keyHdbtt = `${hdbttData.khmshdon}${hdbttData.khhdon}${hdbttData.shdon}${hdbttData.nbmst}`;
+
+        hdbttData.nbmst = replaceData.nbmst;
+        hdbttData.tgtcthue = replaceData.tgtcthue;
+        hdbttData.tgtthue = replaceData.tgtthue;
+        hdbttData.nbten = replaceData.nbten;
+
+        replaceData.nbmst = '';
+        replaceData.tgtcthue = 0;
+        replaceData.tgtthue = 0;
+        replaceData.nbten = 'Hóa đơn thay thế';
+
+        const newKeyHdbtt = `${hdbttData.khmshdon}${hdbttData.khhdon}${hdbttData.shdon}${hdbttData.nbmst}`;
+        const newKeyReplace = `${replaceData.khmshdon}${replaceData.khhdon}${replaceData.shdon}${replaceData.nbmst}`;
+        taxDataMap.delete(keyReplace);
+        taxDataMap.delete(keyHdbtt);
+        taxDataMap.set(newKeyHdbtt, hdbttData);
+        taxDataMap.set(newKeyReplace, replaceData);
+      }
+    });
+
+    taxAdjustMap.forEach((hdbdckey, key) => {
+      if (taxDataMap.has(hdbdckey)) {
+        const hdbdcData = taxDataMap.get(hdbdckey) as InvoicePurchaseData;
+        const AdjustData = taxDataMap.get(key) as InvoicePurchaseData;
+        if (hdbdcData.tgtttbso + AdjustData.tgtttbso == 0) {
+          taxDataMap.delete(key);
+          taxDataMap.delete(hdbdckey);
+          return;
+        }
+        hdbdcData.tgtcthue = hdbdcData.tgtcthue + AdjustData.tgtcthue;
+        hdbdcData.tgtthue = hdbdcData.tgtthue + AdjustData.tgtthue;
+      }
+    });
 
     for (const data of myData) {
       const stt = data?.sott;
@@ -552,26 +626,7 @@ export class InvoiceService {
         const nghdchr = data.nghdchr;
         const sotien_net = data.sotien_net;
         const sotien_tax = data.sotien_tax;
-        if (
-          matchData.tthai == 'Hóa đơn điều chỉnh' ||
-          matchData.tthai == 'Hóa đơn đã bị điều chỉnh'
-        ) {
-          continue;
-        }
-        // if (matchData.tthai == 'Hóa đơn thay thế') {
-        // const key = `${matchData.khmshdgoc}${matchData.khhdgoc}${matchData.shdgoc}${matchData.nbmst}`;
-        // if (taxDataMap.has(key)) {
-        //   matchData = taxDataMap.get(key) as InvoiceData;
-        // myErrorArr.push({
-        //   row: stt,
-        //   shd: sohd,
-        //   tdlap: nghdchr,
-        //   serihd,
-        //   description: `Không tìm thấy hóa đơn bị thay thế tương ứng với hóa đơn thay thế này trong dữ liệu so sánh`,
-        // });
-        // success = false;
-        // }
-        // }
+
         if (nghdchr != matchData.tdlap) {
           myErrorArr.push({
             row: stt,
@@ -630,89 +685,6 @@ export class InvoiceService {
         });
       }
     }
-
-    //Xử lí tiếp các hóa đơn của file thuế
-    taxDataMap.forEach((taxData) => {
-      const taxKey = `${taxData.khmshdon}${taxData.khhdon}${taxData.shdon}${taxData.nbmst}`;
-      // Xử lí cho hóa đơn bằng 0
-      if (
-        taxData.tgtcthue == 0 &&
-        taxData.tgtthue == 0 &&
-        taxData.ttcktmai == 0 &&
-        taxData.tgtphi == 0 &&
-        taxData.tgtttbso == 0
-      ) {
-        taxErrorArr.push({
-          row: taxData.stt,
-          shd: taxData.shdon,
-          tdlap: taxData.tdlap,
-          serihd: `${taxData.khmshdon}${taxData.khhdon}`,
-          description: `Hóa đơn có giá trị bằng 0`,
-        });
-        taxSuccessArr.push(taxKey);
-        return;
-      }
-      // Xử lí cho hóa đơn điều chỉnh
-      if (taxData.tthai == 'Hóa đơn điều chỉnh') {
-        const hdbdckey = `${taxData.khmshdgoc}${taxData.khhdgoc}${taxData.shdgoc}${taxData.nbmst}`; // Hóa đơn bị điều chỉnh
-        if (taxDataMap.has(hdbdckey)) {
-          const hdbdcData = taxDataMap.get(hdbdckey) as InvoiceData;
-          const total_tgtttbso = taxData.tgtttbso + hdbdcData.tgtttbso;
-          if (total_tgtttbso == 0) {
-            taxSuccessArr.push(taxKey);
-            taxSuccessArr.push(hdbdckey);
-            return;
-          }
-          if (myDataMap.has(hdbdckey)) {
-            const tlap = hdbdcData.tdlap;
-            const total_tgtcthue = taxData.tgtcthue + hdbdcData.tgtcthue;
-            const total_tgtthue = taxData.tgtthue + hdbdcData.tgtthue;
-
-            const myData = myDataMap.get(hdbdckey) as UserInvoiceData;
-            if (tlap != myData.nghdchr) {
-              myErrorArr.push({
-                row: myData.sott,
-                shd: myData.sohd,
-                tdlap: myData.nghdchr,
-                serihd: myData.serihd,
-                description: `Ngày lập không khớp với dữ liệu của hóa đơn bị điều chỉnh`,
-              });
-              return;
-            }
-            if (myData.sotien_net != total_tgtcthue) {
-              myErrorArr.push({
-                row: myData.sott,
-                shd: myData.sohd,
-                tdlap: myData.nghdchr,
-                serihd: myData.serihd,
-                description: `Tổng tiền chưa thuế không khớp với dữ liệu sau khi đã cộng trừ với hóa đơn điều chỉnh`,
-              });
-              return;
-            }
-            if (myData.sotien_tax != total_tgtthue) {
-              myErrorArr.push({
-                row: myData.sott,
-                shd: myData.sohd,
-                tdlap: myData.nghdchr,
-                serihd: myData.serihd,
-                description: `Tổng tiền thuế không khớp với dữ liệu sau khi đã cộng trừ với hóa đơn điều chỉnh`,
-              });
-              return;
-            }
-            taxSuccessArr.push(taxKey);
-            taxSuccessArr.push(hdbdckey);
-          } else {
-            taxErrorArr.push({
-              row: taxData.stt,
-              shd: taxData.shdon,
-              tdlap: taxData.tdlap,
-              serihd: `${taxData.khmshdon}${taxData.khhdon}`,
-              description: `Không tìm thấy hóa đơn tương ứng với hóa đơn bị điều chỉnh này trong file dữ liệu`,
-            });
-          }
-        }
-      }
-    });
 
     taxSuccessArr.forEach((key) => {
       taxDataMap.delete(key);
@@ -856,7 +828,8 @@ export class InvoiceService {
       throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
     const myFileBuffer = myFile?.buffer;
 
-    const taxData: InvoiceSoldData[] = await this.mergeInvoiceData<InvoiceSoldData>(data);
+    const taxData: InvoiceSoldData[] =
+      await this.mergeInvoiceData<InvoiceSoldData>(data);
     const myData: UserInvoiceData[] =
       await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
@@ -868,8 +841,10 @@ export class InvoiceService {
     const mySuccessArr = new Map();
     const taxSuccessArr: string[] = [];
     const taxDataMap = new Map<string, InvoiceSoldData>();
+    const taxDataNoMstMap = new Map<string, InvoiceSoldData>();
+    const taxReplaceMap = new Map<string, string>();
+    const taxAdjustMap = new Map<string, string>();
     const myDataMap = new Map<string, UserInvoiceData>();
-
     for (const tax of taxData) {
       const stt = tax?.stt;
       if (!stt) {
@@ -882,10 +857,11 @@ export class InvoiceService {
         });
         continue;
       }
+      tax.nmmst = tax.nmmst?.trim() || '';
       const khms = tax?.khmshdon;
       const khhd = tax?.khhdon?.trim();
       const shd = tax?.shdon;
-      const mst = tax?.nmmst?.trim();
+      const mst = tax?.nmmst;
       const tdlap = tax?.tdlap;
       const serihd = `${khms}${khhd}`;
       if (!khms) {
@@ -918,34 +894,76 @@ export class InvoiceService {
         });
         continue;
       }
-      if (!mst) {
-        taxErrorArr.push({
-          row: stt,
-          shd,
-          tdlap,
-          serihd,
-          description: 'MST người bán không hợp lệ',
-        });
-        continue;
-      }
       if (
         tax.tthai !== 'Hóa đơn mới' &&
         tax.tthai !== 'Hóa đơn thay thế' &&
         tax.tthai !== 'Hóa đơn điều chỉnh' &&
-        tax.tthai !== 'Hóa đơn đã bị điều chỉnh'
+        tax.tthai !== 'Hóa đơn đã bị điều chỉnh' &&
+        tax.tthai !== 'Hóa đơn đã bị thay thế'
       ) {
         taxErrorArr.push({
           row: stt,
           shd,
           tdlap,
           serihd,
-          description: `Hóa đơn không phải là hóa đơn mới hoặc bị thay thế`,
+          description: `Hóa đơn là loại chưa được hỗ trợ so sánh`,
         });
         continue;
       }
       const key = `${khms}${khhd}${shd}${mst}`;
+      const keyNoMst = `${khms}${khhd}${shd}`;
+      if (tax.tthai == 'Hóa đơn thay thế') {
+        const hdbttkey = `${tax.khmshdgoc}${tax.khhdgoc}${tax.shdgoc}`;
+        taxReplaceMap.set(keyNoMst, hdbttkey);
+      }
+      if (tax.tthai == 'Hóa đơn điều chỉnh') {
+        const hdbdckey = `${tax.khmshdgoc}${tax.khhdgoc}${tax.shdgoc}${tax.nmmst}`;
+        taxAdjustMap.set(key, hdbdckey);
+      }
       taxDataMap.set(key, tax);
+      taxDataNoMstMap.set(keyNoMst, tax);
     }
+
+    // Xử lí trước cho case thay thế
+    taxReplaceMap.forEach((hdbttkey, key) => {
+      if (taxDataNoMstMap.has(hdbttkey)) {
+        const replaceData = taxDataNoMstMap.get(key) as InvoiceSoldData;
+        const hdbttData = taxDataNoMstMap.get(hdbttkey) as InvoiceSoldData;
+        const keyReplace = `${replaceData.khmshdon}${replaceData.khhdon}${replaceData.shdon}${replaceData.nmmst}`;
+        const keyHdbtt = `${hdbttData.khmshdon}${hdbttData.khhdon}${hdbttData.shdon}${hdbttData.nmmst}`;
+
+        hdbttData.nmmst = replaceData.nmmst;
+        hdbttData.tgtcthue = replaceData.tgtcthue;
+        hdbttData.tgtthue = replaceData.tgtthue;
+        hdbttData.nmten = replaceData.nmten;
+
+        replaceData.nmmst = '';
+        replaceData.tgtcthue = 0;
+        replaceData.tgtthue = 0;
+        replaceData.nmten = 'Hóa đơn thay thế';
+
+        const newKeyHdbtt = `${hdbttData.khmshdon}${hdbttData.khhdon}${hdbttData.shdon}${hdbttData.nmmst}`;
+        const newKeyReplace = `${replaceData.khmshdon}${replaceData.khhdon}${replaceData.shdon}${replaceData.nmmst}`;
+        taxDataMap.delete(keyReplace);
+        taxDataMap.delete(keyHdbtt);
+        taxDataMap.set(newKeyHdbtt, hdbttData);
+        taxDataMap.set(newKeyReplace, replaceData);
+      }
+    });
+
+    taxAdjustMap.forEach((hdbdckey, key) => {
+      if (taxDataMap.has(hdbdckey)) {
+        const hdbdcData = taxDataMap.get(hdbdckey) as InvoiceSoldData;
+        const AdjustData = taxDataMap.get(key) as InvoiceSoldData;
+        if (hdbdcData.tgtttbso + AdjustData.tgtttbso == 0) {
+          taxDataMap.delete(key);
+          taxDataMap.delete(hdbdckey);
+          return;
+        }
+        hdbdcData.tgtcthue = hdbdcData.tgtcthue + AdjustData.tgtcthue;
+        hdbdcData.tgtthue = hdbdcData.tgtthue + AdjustData.tgtthue;
+      }
+    });
 
     for (const data of myData) {
       const stt = data?.sott;
@@ -961,7 +979,8 @@ export class InvoiceService {
       }
       const serihd = data.serihd?.trim();
       const sohd = Number(data.sohd?.trim()).toString();
-      const masothue = data.masothue?.trim();
+      const masothue =
+        data.masothue?.trim() == '-' ? '' : data.masothue?.trim();
       const nghdchr = data.nghdchr;
 
       if (!serihd) {
@@ -984,16 +1003,6 @@ export class InvoiceService {
         });
         continue;
       }
-      if (!masothue) {
-        myErrorArr.push({
-          row: stt,
-          shd: sohd,
-          tdlap: nghdchr,
-          serihd,
-          description: 'MST người bán không hợp lệ',
-        });
-        continue;
-      }
 
       const key = `${serihd}${sohd}${masothue}`;
       myDataMap.set(key, data);
@@ -1007,12 +1016,6 @@ export class InvoiceService {
         const nghdchr = data.nghdchr;
         const sotien_net = data.sotien_net;
         const sotien_tax = data.sotien_tax;
-        if (
-          matchData.tthai == 'Hóa đơn điều chỉnh' ||
-          matchData.tthai == 'Hóa đơn đã bị điều chỉnh'
-        ) {
-          continue;
-        }
         if (nghdchr != matchData.tdlap) {
           myErrorArr.push({
             row: stt,
@@ -1071,88 +1074,6 @@ export class InvoiceService {
         });
       }
     }
-
-    //Xử lí tiếp các hóa đơn của file thuế
-    taxDataMap.forEach((taxData) => {
-      const taxKey = `${taxData.khmshdon}${taxData.khhdon}${taxData.shdon}${taxData.nmmst}`;
-      // Xử lí cho hóa đơn bằng 0
-      if (
-        taxData.tgtcthue == 0 &&
-        taxData.tgtthue == 0 &&
-        taxData.ttcktmai == 0 &&
-        taxData.tgtttbso == 0
-      ) {
-        taxErrorArr.push({
-          row: taxData.stt,
-          shd: taxData.shdon,
-          tdlap: taxData.tdlap,
-          serihd: `${taxData.khmshdon}${taxData.khhdon}`,
-          description: `Hóa đơn có giá trị bằng 0`,
-        });
-        taxSuccessArr.push(taxKey);
-        return;
-      }
-      // Xử lí cho hóa đơn điều chỉnh
-      if (taxData.tthai == 'Hóa đơn điều chỉnh') {
-        const hdbdckey = `${taxData.khmshdgoc}${taxData.khhdgoc}${taxData.shdgoc}${taxData.nmmst}`; // Hóa đơn bị điều chỉnh
-        if (taxDataMap.has(hdbdckey)) {
-          const hdbdcData = taxDataMap.get(hdbdckey) as InvoiceSoldData;
-          const total_tgtttbso = taxData.tgtttbso + hdbdcData.tgtttbso;
-          if (total_tgtttbso == 0) {
-            taxSuccessArr.push(taxKey);
-            taxSuccessArr.push(hdbdckey);
-            return;
-          }
-          if (myDataMap.has(hdbdckey)) {
-            const tlap = hdbdcData.tdlap;
-            const total_tgtcthue = taxData.tgtcthue + hdbdcData.tgtcthue;
-            const total_tgtthue = taxData.tgtthue + hdbdcData.tgtthue;
-
-            const myData = myDataMap.get(hdbdckey) as UserInvoiceData;
-            if (tlap != myData.nghdchr) {
-              myErrorArr.push({
-                row: myData.sott,
-                shd: myData.sohd,
-                tdlap: myData.nghdchr,
-                serihd: myData.serihd,
-                description: `Ngày lập không khớp với dữ liệu của hóa đơn bị điều chỉnh`,
-              });
-              return;
-            }
-            if (myData.sotien_net != total_tgtcthue) {
-              myErrorArr.push({
-                row: myData.sott,
-                shd: myData.sohd,
-                tdlap: myData.nghdchr,
-                serihd: myData.serihd,
-                description: `Tổng tiền chưa thuế không khớp với dữ liệu sau khi đã cộng trừ với hóa đơn điều chỉnh`,
-              });
-              return;
-            }
-            if (myData.sotien_tax != total_tgtthue) {
-              myErrorArr.push({
-                row: myData.sott,
-                shd: myData.sohd,
-                tdlap: myData.nghdchr,
-                serihd: myData.serihd,
-                description: `Tổng tiền thuế không khớp với dữ liệu sau khi đã cộng trừ với hóa đơn điều chỉnh`,
-              });
-              return;
-            }
-            taxSuccessArr.push(taxKey);
-            taxSuccessArr.push(hdbdckey);
-          } else {
-            taxErrorArr.push({
-              row: taxData.stt,
-              shd: taxData.shdon,
-              tdlap: taxData.tdlap,
-              serihd: `${taxData.khmshdon}${taxData.khhdon}`,
-              description: `Không tìm thấy hóa đơn tương ứng với hóa đơn bị điều chỉnh này trong file dữ liệu`,
-            });
-          }
-        }
-      }
-    });
 
     taxSuccessArr.forEach((key) => {
       taxDataMap.delete(key);

@@ -39,7 +39,7 @@ export interface InvoiceData {
   ttcktmai: number; // Tổng tiền chiết khấu thương mại
   tgtphi: number; // Tổng tiền phí
   tgtttbso: number; // Tổng tiền thanh toán
-  tthai: string; // Trạng thái hóa đơn (1: Hóa đơn mới, 2: Hóa đơn thay thế)
+  tthai: string; // Trạng thái hóa đơn (1: Hóa đơn mới, 2: Hóa đơn thay thế, 3: Hóa đơn điều chỉnh, 4: Hóa đơn đã bị thay thế, 5: Hóa đơn đã bị điều chỉnh)
   nmdchi: string; // Địa chỉ người mua
   nmten: string; // Tên người mua
   khmshdgoc: string | null; // Ký hiệu mẫu số hóa đơn gốc (nếu có)
