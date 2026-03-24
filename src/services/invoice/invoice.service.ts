@@ -622,6 +622,7 @@ export class InvoiceService {
 
       if (matchData) {
         // Logger.log(`Found matching data: ${JSON.stringify(matchData)}`)
+        taxSuccessArr.push(key);
         let success = true;
         const nghdchr = data.nghdchr;
         const sotien_net = data.sotien_net;
@@ -668,9 +669,6 @@ export class InvoiceService {
               serihd,
               description: `Trùng với dòng số ${mySuccessArr.get(key)}`,
             });
-          }
-          if (!taxSuccessArr.includes(key)) {
-            taxSuccessArr.push(key);
           }
         }
       } else {
@@ -1012,6 +1010,7 @@ export class InvoiceService {
 
       if (matchData) {
         // Logger.log(`Found matching data: ${JSON.stringify(matchData)}`)
+        taxSuccessArr.push(key);
         let success = true;
         const nghdchr = data.nghdchr;
         const sotien_net = data.sotien_net;
@@ -1057,9 +1056,6 @@ export class InvoiceService {
               serihd,
               description: `Trùng với dòng số ${mySuccessArr.get(key)}`,
             });
-          }
-          if (!taxSuccessArr.includes(key)) {
-            taxSuccessArr.push(key);
           }
         }
       } else {
