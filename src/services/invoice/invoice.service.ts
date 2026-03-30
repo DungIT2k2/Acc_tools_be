@@ -826,8 +826,8 @@ export class InvoiceService {
     };
 
     if (
-      !invoiceElectronicDataRes['error'] &&
-      !invoiceCashRegisterDataRes['error']
+      !invoiceElectronicDataRes[0]['error'] &&
+      !invoiceCashRegisterDataRes[0]['error']
     ) {
       await this.redisService.set(
         cacheKey,
