@@ -436,7 +436,7 @@ export class InvoiceService {
       );
 
     const taxErrorArr: object[] = [];
-    const myErrorArr: object[] = [];
+    let myErrorArr: object[] = [];
     const mySuccessArr = new Map();
     const taxSuccessArr: string[] = [];
     const taxDataNoMstMap = new Map<string, InvoicePurchaseData>();
@@ -638,6 +638,12 @@ export class InvoiceService {
       }
 
       const key = `${serihd}${sohd}${masothue}`;
+      if (myDataMap.has(key)) {
+        const existingData: UserInvoiceData = myDataMap.get(key) as UserInvoiceData;
+        data.sotien_net += existingData.sotien_net;
+        data.sotien_tax += existingData.sotien_tax;
+        myErrorArr = myErrorArr.filter((item: any) => !(item.shd == sohd && item.serihd === serihd));
+      }
       myDataMap.set(key, data);
 
       Logger.log(`[${stt}] Find key ${key} in tax data map`);
@@ -868,7 +874,7 @@ export class InvoiceService {
       );
 
     const taxErrorArr: object[] = [];
-    const myErrorArr: object[] = [];
+    let myErrorArr: object[] = [];
     const mySuccessArr = new Map();
     const taxSuccessArr: string[] = [];
     const taxDataMap = new Map<string, InvoiceSoldData>();
@@ -1036,6 +1042,12 @@ export class InvoiceService {
       }
 
       const key = `${serihd}${sohd}${masothue}`;
+      if (myDataMap.has(key)) {
+        const existingData: UserInvoiceData = myDataMap.get(key) as UserInvoiceData;
+        data.sotien_net += existingData.sotien_net;
+        data.sotien_tax += existingData.sotien_tax;
+        myErrorArr = myErrorArr.filter((item: any) => !(item.shd == sohd && item.serihd === serihd));
+      }
       myDataMap.set(key, data);
 
       Logger.log(`[${stt}] Find key ${key} in tax data map`);
