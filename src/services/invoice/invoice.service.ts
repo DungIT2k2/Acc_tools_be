@@ -241,9 +241,9 @@ export class InvoiceService {
     };
 
     if (
-      !invoiceIssuedDataRes['error'] &&
-      !invoiceNoCodeDataRes['error'] &&
-      !invoiceCashRegisterDataRes['error']
+      !invoiceIssuedDataRes[0]['error'] &&
+      !invoiceNoCodeDataRes[0]['error'] &&
+      !invoiceCashRegisterDataRes[0]['error']
     ) {
       await this.redisService.set(
         cacheKey,
@@ -276,10 +276,11 @@ export class InvoiceService {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-          timeout: 10000,
+          timeout: 15000,
         });
 
         const data: Invoice[] = res?.data?.datas || [];
+        Logger.log(`Received response with ${data.length || 0} invoices`);
         nextState = res?.data?.state;
 
         allInvoices.push(...data);
@@ -334,7 +335,7 @@ export class InvoiceService {
       }
       return [] as T;
     } catch (error) {
-      Logger.error(`Error fetching purchase invoices: ${error.message}`);
+      Logger.error(`Error fetching purchase invoices: ${error.message} - url: ${url}`);
       return [
         {
           error:
