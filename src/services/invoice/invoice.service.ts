@@ -131,9 +131,10 @@ export class InvoiceService {
 
   async getPurchaseInvoice(
     req: any,
-    query: { from: string; to: string },
+    query: { from: string; to: string; renew?: string },
   ): Promise<object> {
-    const { from, to } = query;
+    const { from, to, renew = 'false' } = query;
+    const renewCache = renew === 'true';
     if (!from || !to) {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
@@ -169,6 +170,7 @@ export class InvoiceService {
         fromDate,
         toDate,
         index === froms.length - 1,
+        renewCache,
       );
       if (
         data['invoiceIssuedData'] &&
@@ -208,12 +210,17 @@ export class InvoiceService {
     from: string,
     to: string,
     lastWait = false,
+    renewCache = false,
   ): Promise<object> {
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `purchase_${usernameInvoice}_${from}_${to}`;
-    let dataCache = await this.redisService.get(cacheKey);
-    if (dataCache) {
-      return JSON.parse(dataCache);
+    if (!renewCache) {
+      let dataCache = await this.redisService.get(cacheKey);
+      if (dataCache) {
+        return JSON.parse(dataCache);
+      }
+    } else {
+      await this.redisService.del(cacheKey);
     }
     const token = await this.redisService.get(key);
     if (!token)
@@ -261,6 +268,7 @@ export class InvoiceService {
     token: string,
     url: string,
     lastWait = false,
+    retry = 0,
   ): Promise<T> {
     try {
       let allInvoices: Invoice[] = [];
@@ -335,7 +343,13 @@ export class InvoiceService {
       }
       return [] as T;
     } catch (error) {
-      Logger.error(`Error fetching purchase invoices: ${error.message} - url: ${url}`);
+      Logger.error(
+        `Error fetching purchase invoices: ${error.message} - url: ${url}`,
+      );
+      if (retry <= 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return this.callGetInvoice<T>(token, url, lastWait, retry + 1);
+      }
       return [
         {
           error:
@@ -378,8 +392,16 @@ export class InvoiceService {
     template: Record<string, string>,
     getType: string,
   ): Promise<Buffer> {
-    const data = await this[getType](req, query);
-    const dataExport = await this.mergeInvoiceData(data);
+    let dataExport = [];
+    try {
+      const data = await this[getType](req, query);
+      dataExport = await this.mergeInvoiceData(data);
+    } catch (error) {
+      throw new HttpException(
+        'Có lỗi xảy ra khi lấy dữ liệu hoá đơn',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     return await this.excelService.exportJSONToExcelBuffer(
       dataExport,
       template,
@@ -702,8 +724,12 @@ export class InvoiceService {
     return { myErrorArr, taxErrorArr };
   }
 
-  async getSoldInvoice(req: any, query: { from: string; to: string }) {
-    const { from, to } = query;
+  async getSoldInvoice(
+    req: any,
+    query: { from: string; to: string; renew?: string },
+  ) {
+    const { from, to, renew = 'false' } = query;
+    const renewCache = renew === 'true';
     if (!from || !to) {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
@@ -738,6 +764,7 @@ export class InvoiceService {
         fromDate,
         toDate,
         index === froms.length - 1,
+        renewCache,
       );
       if (data['invoiceElectronicData'] && data['invoiceCashRegisterData']) {
         dataMerged['invoiceElectronicData'] = [
@@ -766,12 +793,17 @@ export class InvoiceService {
     from: string,
     to: string,
     lastWait = false,
+    renewCache = false,
   ): Promise<object> {
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `sold_${usernameInvoice}_${from}_${to}`;
-    let dataCache = await this.redisService.get(cacheKey);
-    if (dataCache) {
-      return JSON.parse(dataCache);
+    if (!renewCache) {
+      let dataCache = await this.redisService.get(cacheKey);
+      if (dataCache) {
+        return JSON.parse(dataCache);
+      }
+    } else {
+      await this.redisService.del(cacheKey);
     }
     const token = await this.redisService.get(key);
     if (!token)

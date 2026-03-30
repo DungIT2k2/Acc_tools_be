@@ -44,7 +44,7 @@ export class InvoiceController {
   @Get('getPurchaseInvoice')
   @HttpCode(200)
   getPurchaseInvoice(
-    @Query() query: { from: string; to: string },
+    @Query() query: { from: string; to: string; renew?: string },
     @Req() req: Request,
   ): object {
     return this.InvoiceService.getPurchaseInvoice(req, query);
@@ -100,7 +100,7 @@ export class InvoiceController {
   @Get('getSoldInvoice')
   @HttpCode(200)
   getSoldInvoice(
-    @Query() query: { from: string; to: string },
+    @Query() query: { from: string; to: string, renew?: string },
     @Req() req: Request,
   ): object {
     return this.InvoiceService.getSoldInvoice(req, query);
