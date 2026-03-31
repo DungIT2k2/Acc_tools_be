@@ -82,10 +82,12 @@ export class ExcelService {
       myWorksheet.columns.forEach((col) => {
         col.alignment = {
           vertical: 'middle',
-          horizontal: 'left',
+          horizontal: 'center',
           wrapText: true,
         };
       });
+
+      await this.setColumnWidthsFitData(myWorksheet);
     }
 
     if (taxErrorData.length > 0) {
@@ -104,10 +106,12 @@ export class ExcelService {
       taxWorksheet.columns.forEach((col) => {
         col.alignment = {
           vertical: 'middle',
-          horizontal: 'left',
+          horizontal: 'center',
           wrapText: true,
         };
       });
+
+      await this.setColumnWidthsFitData(taxWorksheet);
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -170,5 +174,19 @@ export class ExcelService {
     worksheet.views = [{ state: 'frozen', ySplit: 1 }];
 
     return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  async setColumnWidthsFitData(worksheet: ExcelJS.Worksheet, maxWidth: number = 60) {
+    worksheet.columns.forEach((column) => {
+      let maxLength = 10;
+
+      column.eachCell?.((cell, rowNumber) => {
+        if (rowNumber === 1) return;
+        const val = cell.value ? cell.value.toString() : '';
+        maxLength = Math.max(maxLength, val.length);
+      });
+
+      column.width = Math.min(maxLength + 2, maxWidth);
+    });
   }
 }
