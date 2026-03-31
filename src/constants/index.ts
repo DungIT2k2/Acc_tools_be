@@ -52,6 +52,7 @@ export const TEMPLATE_EXPORT_COMPARE_RESULT = {
   tgtcthue: 'Tổng tiền trước thuế',
   tgtthue: 'Tổng tiền thuế',
   ttcktmai: 'Tổng tiền chiết khấu thương mại',
+  tgtphi: 'Tổng tiền Phí',
   tgtttbso: 'Tổng tiền thanh toán',
   tthai: 'Trạng thái hoá đơn',
   diengiai: 'Diễn giải',
