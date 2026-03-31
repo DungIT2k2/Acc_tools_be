@@ -10,6 +10,19 @@ export class RedisService {
         redis.on('error', (err) => Logger.error(err));
     }
 
+    async hset(key: string, field: string, value: string, ttl?: number) {
+        if (ttl) {
+            await this.redis.hset(key, field, value);
+            await this.redis.expire(key, ttl);
+        } else {
+            await this.redis.hset(key, field, value);
+        }
+    }
+
+    async hget(key: string, field: string) {
+        return this.redis.hget(key, field);
+    }
+
     async get(key: string) {
         return this.redis.get(key);
     }

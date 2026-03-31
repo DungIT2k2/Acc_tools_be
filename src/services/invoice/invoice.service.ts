@@ -215,7 +215,7 @@ export class InvoiceService {
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `purchase_${usernameInvoice}_${from}_${to}`;
     if (!renewCache) {
-      let dataCache = await this.redisService.get(cacheKey);
+      const dataCache = await this.redisService.get(cacheKey);
       if (dataCache) {
         return JSON.parse(dataCache);
       }
@@ -301,50 +301,61 @@ export class InvoiceService {
         if (!lastWait) {
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
-        return allInvoices
-          .filter((invoice: Invoice) => {
-            const name = invoice?.nbten?.toUpperCase() || '';
-            return !name.includes('NGÂN HÀNG') && !name.includes('NGAN HANG');
-          })
-          .map((invoice: Invoice, index: number) => ({
-            stt: index + 1,
-            khmshdon: invoice.khmshdon,
-            khhdon: invoice.khhdon,
-            shdon: invoice.shdon,
-            tdlap: moment(invoice.tdlap)
-              .tz('Asia/Ho_Chi_Minh')
-              .format('DD/MM/YYYY'),
-            nbmst: invoice.nbmst,
-            nbten: invoice.nbten,
-            nmten: invoice.nmtnmua || invoice.nmten,
-            nmmst: invoice.nmmst,
-            tgtcthue: invoice.tgtcthue,
-            tgtthue: invoice.tgtthue,
-            ttcktmai: invoice.ttcktmai,
-            tgtphi: invoice?.tgtphi,
-            tgtttbso: invoice.tgtttbso,
-            tthai:
-              invoice.tthai == 1
-                ? 'Hóa đơn mới'
-                : invoice.tthai == 2
-                  ? 'Hóa đơn thay thế'
-                  : invoice.tthai == 3
-                    ? 'Hóa đơn điều chỉnh'
-                    : invoice.tthai == 4
-                      ? 'Hóa đơn đã bị thay thế'
-                      : invoice.tthai == 5
-                        ? 'Hóa đơn đã bị điều chỉnh'
-                        : invoice.tthai,
-            nmdchi: invoice.nmdchi,
-            khmshdgoc: invoice.khmshdgoc,
-            khhdgoc: invoice.khhdgoc,
-            shdgoc: invoice.shdgoc,
-          })) as T;
+
+        const filtered = allInvoices.filter((invoice: Invoice) => {
+          const name = invoice?.nbten?.toUpperCase() || '';
+          return !name.includes('NGÂN HÀNG') && !name.includes('NGAN HANG');
+        });
+
+        const result = await Promise.all(
+          filtered.map(async (invoice: Invoice, index: number) => {
+            const diengiai = await this.getInvoiceDetail(invoice, token);
+
+            return {
+              stt: index + 1,
+              khmshdon: invoice.khmshdon,
+              khhdon: invoice.khhdon,
+              shdon: invoice.shdon,
+              tdlap: moment(invoice.tdlap)
+                .tz('Asia/Ho_Chi_Minh')
+                .format('DD/MM/YYYY'),
+              nbmst: invoice.nbmst,
+              nbten: invoice.nbten,
+              nmten: invoice.nmtnmua || invoice.nmten,
+              nmmst: invoice.nmmst,
+              tgtcthue: invoice.tgtcthue,
+              tgtthue: invoice.tgtthue,
+              ttcktmai: invoice.ttcktmai,
+              tgtphi: invoice?.tgtphi,
+              tgtttbso: invoice.tgtttbso,
+              tthai:
+                invoice.tthai == 1
+                  ? 'Hóa đơn mới'
+                  : invoice.tthai == 2
+                    ? 'Hóa đơn thay thế'
+                    : invoice.tthai == 3
+                      ? 'Hóa đơn điều chỉnh'
+                      : invoice.tthai == 4
+                        ? 'Hóa đơn đã bị thay thế'
+                        : invoice.tthai == 5
+                          ? 'Hóa đơn đã bị điều chỉnh'
+                          : invoice.tthai,
+              nmdchi: invoice.nmdchi,
+              khmshdgoc: invoice.khmshdgoc,
+              khhdgoc: invoice.khhdgoc,
+              shdgoc: invoice.shdgoc,
+              diengiai,
+            };
+          }),
+        );
+
+        return result as T;
       }
+
       return [] as T;
     } catch (error) {
       Logger.error(
-        `Error fetching purchase invoices: ${error.message} - url: ${url}`,
+        `Error fetching purchase invoices: ${error.response?.data?.message || error.message} - url: ${url}`,
       );
       if (retry <= 2) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -1156,5 +1167,39 @@ export class InvoiceService {
     data: InvoiceData[],
   ): Promise<InvoicePurchaseData[]> {
     return data.map(({ nmmst, nmten, ...rest }) => rest);
+  }
+
+  async getInvoiceDetail(invoice: Invoice, token: string): Promise<string> {
+    try {
+      const requestUrl = `${this.baseUrlInvoice}/query/invoices/detail?nbmst=${invoice.nbmst}&khhdon=${invoice.khhdon}&shdon=${invoice.shdon}&khmshdon=${invoice.khmshdon}`;
+      Logger.log(`Fetching detail from URL: ${requestUrl}`);
+      const keyDetail = `${invoice.khmshdon}${invoice.khhdon}${invoice.shdon}`;
+      const cachedDetail = await this.redisService.hget(
+        `detail_${invoice.nbmst}`,
+        keyDetail,
+      );
+      if (cachedDetail) {
+        return cachedDetail;
+      }
+      const res = await axios.get(requestUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        timeout: 5000,
+      });
+      const diengiai: string = res?.data?.hdhhdvu?.[0]?.ten || '';
+      await this.redisService.hset(
+        `detail_${invoice.nbmst}`,
+        keyDetail,
+        diengiai,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return diengiai;
+    } catch (error) {
+      Logger.error(
+        `Error fetching invoice detail: ${error.response?.data?.message || error.message}`,
+      );
+      return 'error';
+    }
   }
 }
