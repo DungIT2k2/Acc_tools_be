@@ -1276,6 +1276,7 @@ export class InvoiceService {
         `detail_${invoice.nbmst}`,
         keyDetail,
         diengiai,
+        30 * 24 * 60 * 60,
       );
       await new Promise((resolve) => setTimeout(resolve, 400));
       return diengiai;
