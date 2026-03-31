@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
+import { InvoiceData, UserInvoiceData } from 'src/requests';
 
 @Injectable()
 export class ExcelService {
-  constructor() { };
+  constructor() {}
 
-  async readExcelFromBufferToJSON<T>(buffer: Buffer, stringPattern: string): Promise<T> {
+  async readExcelFromBufferToJSON<T>(
+    buffer: Buffer,
+    stringPattern: string,
+  ): Promise<T> {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
     const sheetName = workbook.SheetNames[0];
@@ -19,10 +23,7 @@ export class ExcelService {
     });
 
     const headerIndex = raw.findIndex((row) =>
-      row.some(
-        (cell) =>
-          String(cell).trim().toLowerCase() === stringPattern
-      )
+      row.some((cell) => String(cell).trim().toLowerCase() === stringPattern),
     );
 
     if (headerIndex === -1) {
@@ -56,61 +57,118 @@ export class ExcelService {
     return result;
   }
 
+  async exportCompareResultToExcelBuffer(
+    myErrorData: any[],
+    taxErrorData: any[],
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+
+    const myWorksheet = workbook.addWorksheet('Bảng kê');
+    const taxWorksheet = workbook.addWorksheet('Hoá đơn điện tử');
+
+    if (myErrorData.length > 0) {
+      const headers = Object.keys(myErrorData[0]);
+
+      myWorksheet.columns = headers.map((key) => ({
+        header: key,
+        key: key,
+        width: 20,
+      }));
+
+      myWorksheet.addRows(myErrorData);
+
+      myWorksheet.getRow(1).font = { bold: true };
+
+      myWorksheet.columns.forEach((col) => {
+        col.alignment = {
+          vertical: 'middle',
+          horizontal: 'left',
+          wrapText: true,
+        };
+      });
+    }
+
+    if (taxErrorData.length > 0) {
+      const headers = Object.keys(taxErrorData[0]);
+
+      taxWorksheet.columns = headers.map((key) => ({
+        header: key,
+        key: key,
+        width: 20,
+      }));
+
+      taxWorksheet.addRows(taxErrorData);
+
+      taxWorksheet.getRow(1).font = { bold: true };
+
+      taxWorksheet.columns.forEach((col) => {
+        col.alignment = {
+          vertical: 'middle',
+          horizontal: 'left',
+          wrapText: true,
+        };
+      });
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
   async exportJSONToExcelBuffer(
-  data: any[],
-  header: Record<string, string>,
-  currencyFields: string[] = [] 
-): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Sheet1');
+    data: any[],
+    header: Record<string, string>,
+    currencyFields: string[] = [],
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Sheet1');
 
-  const keys = Object.keys(header);
+    const keys = Object.keys(header);
 
-  worksheet.columns = keys.map((key) => ({
-    header: header[key],
-    key: key,
-    width: 20,
-  }));
+    worksheet.columns = keys.map((key) => ({
+      header: header[key],
+      key: key,
+      width: 20,
+    }));
 
-  worksheet.addRows(data);
+    worksheet.addRows(data);
 
-  worksheet.eachRow((row, rowNumber) => {
-    row.eachCell((cell, colNumber) => {
-      const columnKey = keys[colNumber - 1];
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell, colNumber) => {
+        const columnKey = keys[colNumber - 1];
 
-      cell.alignment = {
-        vertical: 'middle',
-        horizontal: 'center',
-        wrapText: true,
-      };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
 
-      if (rowNumber > 1 && currencyFields.includes(columnKey)) {
-        cell.numFmt = '#,##0';
-      }
-    });
-  });
-
-  worksheet.getRow(1).eachCell((cell) => {
-    cell.font = { bold: true };
-  });
-
-  const MAX_WIDTH = 60;
-
-  worksheet.columns.forEach((column) => {
-    let maxLength = 10;
-
-    column.eachCell?.((cell, rowNumber) => {
-      if (rowNumber === 1) return;
-      const val = cell.value ? cell.value.toString() : '';
-      maxLength = Math.max(maxLength, val.length);
+        if (rowNumber > 1 && currencyFields.includes(columnKey)) {
+          cell.numFmt = '#,##0';
+        }
+      });
     });
 
-    column.width = Math.min(maxLength + 2, MAX_WIDTH);
-  });
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+    });
 
-  // Freeze header
-  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    const MAX_WIDTH = 60;
 
-  return Buffer.from(await workbook.xlsx.writeBuffer());
-}
+    worksheet.columns.forEach((column) => {
+      let maxLength = 10;
+
+      column.eachCell?.((cell, rowNumber) => {
+        if (rowNumber === 1) return;
+        const val = cell.value ? cell.value.toString() : '';
+        maxLength = Math.max(maxLength, val.length);
+      });
+
+      column.width = Math.min(maxLength + 2, MAX_WIDTH);
+    });
+
+    // Freeze header
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
 }

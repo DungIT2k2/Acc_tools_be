@@ -462,6 +462,8 @@ export class InvoiceService {
     const taxAdjustMap = new Map<string, string>();
     const taxDataMap = new Map<string, InvoicePurchaseData>();
     const myDataMap = new Map<string, UserInvoiceData>();
+    const taxOriginalDataMap = new Map<number, InvoicePurchaseData>();
+    const myOriginalDataMap = new Map<number, UserInvoiceData>();
 
     for (const tax of taxData) {
       const stt = tax?.stt;
@@ -475,6 +477,7 @@ export class InvoiceService {
         });
         continue;
       }
+      taxOriginalDataMap.set(stt, tax);
       const khms = tax?.khmshdon;
       const khhd = tax?.khhdon?.trim();
       const shd = tax?.shdon;
@@ -619,6 +622,7 @@ export class InvoiceService {
         });
         continue;
       }
+      myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.trim();
       const sohd = Number(data.sohd?.trim()).toString();
       const masothue = data.masothue?.trim();
@@ -748,8 +752,38 @@ export class InvoiceService {
         description: 'Không tìm thấy dữ liệu hóa đơn khớp với file của bạn',
       });
     });
+    const keyRecord = `compare_${req['user']['usernameInvoice']}_${Date.now()}`;
+    const myErrorData: UserInvoiceData[] = [];
+    const taxErrorData: InvoicePurchaseData[] = [];
+    myErrorArr.forEach((item: any) => {
+      const originalData = myOriginalDataMap.get(
+        item.row as number,
+      ) as UserInvoiceData;
+      if (originalData) {
+        myErrorData.push(originalData);
+      }
+    });
 
-    return { myErrorArr, taxErrorArr };
+    taxErrorArr.forEach((item: any) => {
+      const originalData = taxOriginalDataMap.get(
+        item.row as number,
+      ) as InvoicePurchaseData;
+      if (originalData) {
+        taxErrorData.push(originalData);
+      }
+    });
+
+    const dataErrorRecord = {
+      myErrorData,
+      taxErrorData,
+    };
+    await this.redisService.set(
+      keyRecord,
+      JSON.stringify(dataErrorRecord),
+      5 * 60,
+    );
+
+    return { myErrorArr, taxErrorArr, record: keyRecord };
   }
 
   async getSoldInvoice(
@@ -904,6 +938,9 @@ export class InvoiceService {
     const taxReplaceMap = new Map<string, string>();
     const taxAdjustMap = new Map<string, string>();
     const myDataMap = new Map<string, UserInvoiceData>();
+    const myOriginalDataMap = new Map<number, UserInvoiceData>();
+    const taxOriginalDataMap = new Map<number, InvoiceSoldData>();
+
     for (const tax of taxData) {
       const stt = tax?.stt;
       if (!stt) {
@@ -916,6 +953,7 @@ export class InvoiceService {
         });
         continue;
       }
+      taxOriginalDataMap.set(stt, tax);
       tax.nmmst = tax.nmmst?.trim() || '';
       const khms = tax?.khmshdon;
       const khhd = tax?.khhdon?.trim();
@@ -1036,6 +1074,7 @@ export class InvoiceService {
         });
         continue;
       }
+      myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.trim();
       const sohd = Number(data.sohd?.trim()).toString();
       const masothue =
@@ -1156,7 +1195,52 @@ export class InvoiceService {
       });
     });
 
-    return { myErrorArr, taxErrorArr };
+    const keyRecord = `compare_${req['user']['usernameInvoice']}_${Date.now()}`;
+    const myErrorData: UserInvoiceData[] = [];
+    const taxErrorData: InvoiceSoldData[] = [];
+    myErrorArr.forEach((item: any) => {
+      const originalData = myOriginalDataMap.get(
+        item.row as number,
+      ) as UserInvoiceData;
+      if (originalData) {
+        myErrorData.push(originalData);
+      }
+    });
+
+    taxErrorArr.forEach((item: any) => {
+      const originalData = taxOriginalDataMap.get(
+        item.row as number,
+      ) as InvoiceSoldData;
+      if (originalData) {
+        taxErrorData.push(originalData);
+      }
+    });
+
+    const dataErrorRecord = {
+      myErrorData,
+      taxErrorData,
+    };
+    await this.redisService.set(
+      keyRecord,
+      JSON.stringify(dataErrorRecord),
+      5 * 60,
+    );
+
+    return { myErrorArr, taxErrorArr, record: keyRecord };
+  }
+
+  async exportCompareResult(query: { record: string }): Promise<Buffer> {
+    const { record } = query;
+    const data = await this.redisService.get(record);
+    if (!data) {
+      throw new HttpException('Không tìm thấy kết quả', HttpStatus.NOT_FOUND);
+    }
+    const parsedData = JSON.parse(data);
+    const { myErrorData, taxErrorData } = parsedData;
+    return this.excelService.exportCompareResultToExcelBuffer(
+      myErrorData as any[],
+      taxErrorData as any[],
+    );
   }
 
   async mapSoldInvoiceData(data: InvoiceData[]): Promise<InvoiceSoldData[]> {

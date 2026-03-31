@@ -152,4 +152,33 @@ export class InvoiceController {
   ): object {
     return this.InvoiceService.compareSoldInvoice(files, formData, req);
   }
+
+  @Get('exportCompareResult')
+  @HttpCode(200)
+  async exportCompareResult(
+    @Query() query: { record: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.InvoiceService.exportCompareResult(query);
+
+    const fileName = `ket-qua-so-sanh-${req['user']['usernameInvoice']}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'Content-Disposition',
+    );
+
+    res.setHeader('Content-Length', buffer.length);
+
+    return res.send(buffer);
+  }
 }
