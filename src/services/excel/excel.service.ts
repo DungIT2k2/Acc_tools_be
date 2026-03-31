@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { InvoiceData, UserInvoiceData } from 'src/requests';
+import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
 
 @Injectable()
 export class ExcelService {
@@ -94,7 +95,7 @@ export class ExcelService {
       const headers = Object.keys(taxErrorData[0]);
 
       taxWorksheet.columns = headers.map((key) => ({
-        header: key,
+        header: TEMPLATE_EXPORT_COMPARE_RESULT[key] || key,
         key: key,
         width: 20,
       }));
