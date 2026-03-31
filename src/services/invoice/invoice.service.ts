@@ -302,10 +302,10 @@ export class InvoiceService {
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
         return allInvoices
-          .filter(
-            (invoice: Invoice) =>
-              !invoice?.nbten?.toUpperCase().includes('NGÂN HÀNG'),
-          )
+          .filter((invoice: Invoice) => {
+            const name = invoice?.nbten?.toUpperCase() || '';
+            return !name.includes('NGÂN HÀNG') && !name.includes('NGAN HANG');
+          })
           .map((invoice: Invoice, index: number) => ({
             stt: index + 1,
             khmshdon: invoice.khmshdon,
