@@ -367,7 +367,14 @@ export class InvoiceService {
       .sort((a, b) => {
         const dateA = parseDate(a?.tdlap);
         const dateB = parseDate(b?.tdlap);
-        return dateA - dateB;
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+
+        const shdonA = Number(a?.shdon) || 0;
+        const shdonB = Number(b?.shdon) || 0;
+
+        return shdonA - shdonB;
       })
       .map((item, index) => {
         const tgtphi = item?.tgtphi || 0;
@@ -639,10 +646,14 @@ export class InvoiceService {
 
       const key = `${serihd}${sohd}${masothue}`;
       if (myDataMap.has(key)) {
-        const existingData: UserInvoiceData = myDataMap.get(key) as UserInvoiceData;
+        const existingData: UserInvoiceData = myDataMap.get(
+          key,
+        ) as UserInvoiceData;
         data.sotien_net += existingData.sotien_net;
         data.sotien_tax += existingData.sotien_tax;
-        myErrorArr = myErrorArr.filter((item: any) => !(item.shd == sohd && item.serihd === serihd));
+        myErrorArr = myErrorArr.filter(
+          (item: any) => !(item.shd == sohd && item.serihd === serihd),
+        );
       }
       myDataMap.set(key, data);
 
@@ -1043,10 +1054,14 @@ export class InvoiceService {
 
       const key = `${serihd}${sohd}${masothue}`;
       if (myDataMap.has(key)) {
-        const existingData: UserInvoiceData = myDataMap.get(key) as UserInvoiceData;
+        const existingData: UserInvoiceData = myDataMap.get(
+          key,
+        ) as UserInvoiceData;
         data.sotien_net += existingData.sotien_net;
         data.sotien_tax += existingData.sotien_tax;
-        myErrorArr = myErrorArr.filter((item: any) => !(item.shd == sohd && item.serihd === serihd));
+        myErrorArr = myErrorArr.filter(
+          (item: any) => !(item.shd == sohd && item.serihd === serihd),
+        );
       }
       myDataMap.set(key, data);
 
