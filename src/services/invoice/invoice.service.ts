@@ -1278,7 +1278,7 @@ export class InvoiceService {
         diengiai,
         30 * 24 * 60 * 60,
       );
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await new Promise((resolve) => setTimeout(resolve, 550));
       return diengiai;
     } catch (error) {
       Logger.error(
