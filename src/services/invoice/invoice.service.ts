@@ -24,7 +24,7 @@ export class InvoiceService {
     private readonly redisService: RedisService,
   ) {}
 
-  async listLogged(req: any): Promise<object[]> {
+  async listLogged(): Promise<object[]> {
     const listKey = await this.redisService.getlistLoggedInvoice('invoice_*');
     return listKey;
   }
@@ -61,7 +61,8 @@ export class InvoiceService {
       } catch (error) {
         Logger.error(`Error logging in to invoice system: ${error.message}`);
         throw new HttpException(
-          error.response?.data?.message || 'Đăng nhập hoá đơn điện tử thất bại',
+          (error.response?.data?.message as string) ||
+            'Đăng nhập hoá đơn điện tử thất bại',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -77,7 +78,7 @@ export class InvoiceService {
           `${this.baseUrlInvoice}/security-taxpayer/profile`,
           {
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${token as string}`,
             },
             timeout: 5000,
           },
@@ -89,7 +90,7 @@ export class InvoiceService {
         );
       }
 
-      this.redisService.set(
+      await this.redisService.set(
         keyRedis,
         JSON.stringify({
           tokenInvoice: token,
@@ -99,7 +100,9 @@ export class InvoiceService {
       );
     }
 
-    const authorization = req['headers']['authorization'].split(' ')[1];
+    const authorization = (req['headers']['authorization'] as string).split(
+      ' ',
+    )[1];
     const timeNow = Date.now();
     const key = `${username}_${timeNow}`;
 
@@ -116,10 +119,10 @@ export class InvoiceService {
     return { access_token };
   }
 
-  async handleLogoutInvoice(req: any): Promise<object> {
+  public handleLogoutInvoice(req: any): object {
     if (!req['user']['usernameInvoice'] || !req['user']['time'])
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-    const { username, usernameInvoice, time } = req['user'];
+    const { usernameInvoice, time } = req['user'];
     const key = `${usernameInvoice}_${time}`;
     this.accInvoiceMap.get(key);
     const access_token = this.accInvoiceMap.get(key)?.['access_token'];
@@ -131,10 +134,11 @@ export class InvoiceService {
 
   async getPurchaseInvoice(
     req: any,
-    query: { from: string; to: string; renew?: string },
+    query: { from: string; to: string; renew?: string; renewDetail?: string },
   ): Promise<object> {
-    const { from, to, renew = 'false' } = query;
+    const { from, to, renew = 'false', renewDetail = 'false' } = query;
     const renewCache = renew === 'true';
+    const renewDetailCache = renewDetail === 'true';
     if (!from || !to) {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
@@ -166,11 +170,12 @@ export class InvoiceService {
         throw new HttpException('Invalid date format', HttpStatus.BAD_REQUEST);
       }
       const data = await this.getOneMonthPurchaseInvoice(
-        usernameInvoice,
+        usernameInvoice as string,
         fromDate,
         toDate,
         index === froms.length - 1,
         renewCache,
+        renewDetailCache,
       );
       if (
         data['invoiceIssuedData'] &&
@@ -192,15 +197,15 @@ export class InvoiceService {
       }
     }
     const dataRes = {
-      invoiceIssuedData: (await this.mapPurchaseInvoiceData(
-        dataMerged.invoiceIssuedData,
-      )) as InvoicePurchaseData[],
-      invoiceNoCodeData: (await this.mapPurchaseInvoiceData(
-        dataMerged.invoiceNoCodeData,
-      )) as InvoicePurchaseData[],
-      invoiceCashRegisterData: (await this.mapPurchaseInvoiceData(
-        dataMerged.invoiceCashRegisterData,
-      )) as InvoicePurchaseData[],
+      invoiceIssuedData: this.mapPurchaseInvoiceData(
+        dataMerged.invoiceIssuedData as InvoiceData[],
+      ),
+      invoiceNoCodeData: this.mapPurchaseInvoiceData(
+        dataMerged.invoiceNoCodeData as InvoiceData[],
+      ),
+      invoiceCashRegisterData: this.mapPurchaseInvoiceData(
+        dataMerged.invoiceCashRegisterData as InvoiceData[],
+      ),
     };
     return dataRes;
   }
@@ -211,22 +216,58 @@ export class InvoiceService {
     to: string,
     lastWait = false,
     renewCache = false,
+    renewDetailCache = false,
   ): Promise<object> {
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `purchase_${usernameInvoice}_${from}_${to}`;
-    if (!renewCache) {
-      const dataCache = await this.redisService.get(cacheKey);
-      if (dataCache) {
-        return JSON.parse(dataCache);
-      }
-    } else {
-      await this.redisService.del(cacheKey);
-    }
     const token = await this.redisService.get(key);
     if (!token)
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
 
-    const tokenInvoice = JSON.parse(token)?.tokenInvoice;
+    const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
+    if (!renewCache) {
+      const dataCache = await this.redisService.get(cacheKey);
+      if (dataCache) {
+        if (!renewDetailCache) {
+          return JSON.parse(dataCache) as object;
+        }
+        const dataCacheParsed = JSON.parse(dataCache);
+        let { invoiceIssuedData, invoiceNoCodeData, invoiceCashRegisterData } =
+          dataCacheParsed;
+        if (invoiceIssuedData.length > 0) {
+          invoiceIssuedData = await this.getAllInvoiceDetailInMap(
+            invoiceIssuedData as Invoice[],
+            tokenInvoice,
+          );
+        }
+        if (invoiceNoCodeData.length > 0) {
+          invoiceNoCodeData = await this.getAllInvoiceDetailInMap(
+            invoiceNoCodeData as Invoice[],
+            tokenInvoice,
+          );
+        }
+        if (invoiceCashRegisterData.length > 0) {
+          invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
+            invoiceCashRegisterData as Invoice[],
+            tokenInvoice,
+          );
+        }
+        const dataRes = {
+          invoiceIssuedData,
+          invoiceNoCodeData,
+          invoiceCashRegisterData,
+        };
+
+        await this.redisService.set(
+          cacheKey,
+          JSON.stringify(dataRes),
+          24 * 60 * 60 * 2,
+        );
+        return dataRes;
+      }
+    } else {
+      await this.redisService.del(cacheKey);
+    }
 
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
     const invoiceIssuedDataRes: InvoiceData[] = await this.callGetInvoice<
@@ -271,24 +312,23 @@ export class InvoiceService {
     retry = 0,
   ): Promise<T> {
     try {
-      let allInvoices: Invoice[] = [];
+      const allInvoices: Invoice[] = [];
       let nextState: string | undefined = undefined;
 
       do {
         const requestUrl = nextState
           ? url.replace('$state$', `&state=${nextState}`)
           : url.replace('$state$', '');
-        Logger.log(`Fetching invoices from URL: ${requestUrl}`);
 
-        const res = await axios.get(requestUrl, {
+        const res = await axios.get(requestUrl as string, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
           timeout: 15000,
         });
 
+        Logger.log(`Fetching invoices from URL: ${requestUrl} => Done`);
         const data: Invoice[] = res?.data?.datas || [];
-        Logger.log(`Received response with ${data.length || 0} invoices`);
         nextState = res?.data?.state;
 
         allInvoices.push(...data);
@@ -309,7 +349,7 @@ export class InvoiceService {
 
         const result = await Promise.all(
           filtered.map(async (invoice: Invoice, index: number) => {
-            const diengiai = await this.getInvoiceDetail(invoice, token);
+            const diengiai = await this.getInvoiceDetail(invoice, token, true);
 
             return {
               stt: index + 1,
@@ -372,12 +412,12 @@ export class InvoiceService {
     }
   }
 
-  async mergeInvoiceData<T extends object>(data: object): Promise<T[]> {
+  private mergeInvoiceData<T extends object>(data: object): T[] {
     const dataMerged = Object.values(data)
       .flat()
       .sort((a, b) => {
-        const dateA = parseDate(a?.tdlap);
-        const dateB = parseDate(b?.tdlap);
+        const dateA = parseDate(a?.tdlap as string);
+        const dateB = parseDate(b?.tdlap as string);
         if (dateA !== dateB) {
           return dateA - dateB;
         }
@@ -398,7 +438,7 @@ export class InvoiceService {
           ttcktmai: item?.ttcktmai || 0,
           tgtphi,
           tgtcthue: baseTgtcthue + tgtphi,
-        };
+        } as T;
       });
 
     return dataMerged;
@@ -413,8 +453,9 @@ export class InvoiceService {
     let dataExport = [];
     try {
       const data = await this[getType](req, query);
-      dataExport = await this.mergeInvoiceData(data);
+      dataExport = this.mergeInvoiceData(data as object);
     } catch (error) {
+      Logger.error(`Error getting invoice: ${error.message}`);
       throw new HttpException(
         'Có lỗi xảy ra khi lấy dữ liệu hoá đơn',
         HttpStatus.BAD_REQUEST,
@@ -439,16 +480,16 @@ export class InvoiceService {
 
     if (!myFile)
       throw new HttpException('Vui lòng import file', HttpStatus.BAD_REQUEST);
-    const myFileName = myFile?.originalname;
+    const myFileName: string = myFile?.originalname;
 
     if (!myFileName || !myFileName.includes('.xlsx'))
       throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
-    const myFileBuffer = myFile?.buffer;
+    const myFileBuffer: Buffer = myFile?.buffer;
 
     const taxData: InvoicePurchaseData[] =
-      await this.mergeInvoiceData<InvoicePurchaseData>(data);
+      this.mergeInvoiceData<InvoicePurchaseData>(data);
     const myData: UserInvoiceData[] =
-      await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
+      this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
         'sott',
       );
@@ -673,7 +714,7 @@ export class InvoiceService {
       myDataMap.set(key, data);
 
       Logger.log(`[${stt}] Find key ${key} in tax data map`);
-      let matchData = taxDataMap.get(key);
+      const matchData = taxDataMap.get(key);
 
       if (matchData) {
         // Logger.log(`Found matching data: ${JSON.stringify(matchData)}`)
@@ -788,10 +829,11 @@ export class InvoiceService {
 
   async getSoldInvoice(
     req: any,
-    query: { from: string; to: string; renew?: string },
+    query: { from: string; to: string; renew?: string; renewDetail?: string },
   ) {
-    const { from, to, renew = 'false' } = query;
+    const { from, to, renew = 'false', renewDetail = 'false' } = query;
     const renewCache = renew === 'true';
+    const renewDetailCache = renewDetail === 'true';
     if (!from || !to) {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
@@ -801,7 +843,7 @@ export class InvoiceService {
       throw new HttpException('Invalid request body', HttpStatus.BAD_REQUEST);
     }
 
-    const usernameInvoice = req['user']['usernameInvoice'];
+    const usernameInvoice: string = req['user']['usernameInvoice'];
     const dataMerged = {
       invoiceElectronicData: [] as any[],
       invoiceCashRegisterData: [] as any[],
@@ -827,6 +869,7 @@ export class InvoiceService {
         toDate,
         index === froms.length - 1,
         renewCache,
+        renewDetailCache,
       );
       if (data['invoiceElectronicData'] && data['invoiceCashRegisterData']) {
         dataMerged['invoiceElectronicData'] = [
@@ -840,11 +883,11 @@ export class InvoiceService {
       }
     }
     const dataRes = {
-      invoiceElectronicData: await this.mapSoldInvoiceData(
-        dataMerged.invoiceElectronicData,
+      invoiceElectronicData: this.mapSoldInvoiceData(
+        dataMerged.invoiceElectronicData as InvoiceData[],
       ),
-      invoiceCashRegisterData: await this.mapSoldInvoiceData(
-        dataMerged.invoiceCashRegisterData,
+      invoiceCashRegisterData: this.mapSoldInvoiceData(
+        dataMerged.invoiceCashRegisterData as InvoiceData[],
       ),
     };
     return dataRes;
@@ -856,22 +899,51 @@ export class InvoiceService {
     to: string,
     lastWait = false,
     renewCache = false,
+    renewDetailCache = false,
   ): Promise<object> {
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `sold_${usernameInvoice}_${from}_${to}`;
-    if (!renewCache) {
-      let dataCache = await this.redisService.get(cacheKey);
-      if (dataCache) {
-        return JSON.parse(dataCache);
-      }
-    } else {
-      await this.redisService.del(cacheKey);
-    }
     const token = await this.redisService.get(key);
     if (!token)
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
 
-    const tokenInvoice = JSON.parse(token)?.tokenInvoice;
+    const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
+
+    if (!renewCache) {
+      const dataCache = await this.redisService.get(cacheKey);
+      if (!renewDetailCache) {
+        if (dataCache) {
+          return JSON.parse(dataCache) as object;
+        }
+      }
+      const dataCacheParsed = JSON.parse(dataCache as string);
+      let { invoiceElectronicData, invoiceCashRegisterData } = dataCacheParsed;
+      if (invoiceElectronicData.length > 0) {
+        invoiceElectronicData = await this.getAllInvoiceDetailInMap(
+          invoiceElectronicData as Invoice[],
+          tokenInvoice,
+        );
+      }
+      if (invoiceCashRegisterData.length > 0) {
+        invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
+          invoiceCashRegisterData as Invoice[],
+          tokenInvoice,
+        );
+      }
+      const dataRes = {
+        invoiceElectronicData,
+        invoiceCashRegisterData,
+      };
+
+      await this.redisService.set(
+        cacheKey,
+        JSON.stringify(dataRes),
+        24 * 60 * 60 * 2,
+      );
+      return dataRes;
+    } else {
+      await this.redisService.del(cacheKey);
+    }
 
     const urlInvoiceElectronic = `${this.baseUrlInvoice}/query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
     const invoiceElectronicDataRes: InvoiceData[] = await this.callGetInvoice<
@@ -915,16 +987,16 @@ export class InvoiceService {
 
     if (!myFile)
       throw new HttpException('Vui lòng import file', HttpStatus.BAD_REQUEST);
-    const myFileName = myFile?.originalname;
+    const myFileName: string = myFile?.originalname;
 
     if (!myFileName || !myFileName.includes('.xlsx'))
       throw new HttpException('File không hợp lệ', HttpStatus.BAD_REQUEST);
-    const myFileBuffer = myFile?.buffer;
+    const myFileBuffer: Buffer = myFile?.buffer;
 
     const taxData: InvoiceSoldData[] =
-      await this.mergeInvoiceData<InvoiceSoldData>(data);
+      this.mergeInvoiceData<InvoiceSoldData>(data);
     const myData: UserInvoiceData[] =
-      await this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
+      this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
         'sott',
       );
@@ -1116,7 +1188,7 @@ export class InvoiceService {
       myDataMap.set(key, data);
 
       Logger.log(`[${stt}] Find key ${key} in tax data map`);
-      let matchData = taxDataMap.get(key);
+      const matchData = taxDataMap.get(key);
 
       if (matchData) {
         // Logger.log(`Found matching data: ${JSON.stringify(matchData)}`)
@@ -1243,28 +1315,50 @@ export class InvoiceService {
     );
   }
 
-  async mapSoldInvoiceData(data: InvoiceData[]): Promise<InvoiceSoldData[]> {
+  private mapSoldInvoiceData(data: InvoiceData[]): InvoiceSoldData[] {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     return data.map(({ nbmst, nbten, tgtphi, ...rest }) => rest);
   }
 
-  async mapPurchaseInvoiceData(
-    data: InvoiceData[],
-  ): Promise<InvoicePurchaseData[]> {
+  private mapPurchaseInvoiceData(data: InvoiceData[]): InvoicePurchaseData[] {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     return data.map(({ nmmst, nmten, ...rest }) => rest);
   }
 
-  async getInvoiceDetail(invoice: Invoice, token: string): Promise<string> {
+  async getAllInvoiceDetailInMap<T>(
+    invoices: Invoice[],
+    token: string,
+  ): Promise<T[]> {
+    const dataRes: T[] = [];
+    for (const invoice of invoices) {
+      const diengiai = await this.getInvoiceDetail(invoice, token);
+      dataRes.push({
+        ...invoice,
+        diengiai,
+      } as T);
+    }
+    return dataRes;
+  }
+
+  async getInvoiceDetail(
+    invoice: Invoice,
+    token: string,
+    useCache: boolean = false,
+  ): Promise<string> {
+    const keyDetail = `${invoice.khmshdon}${invoice.khhdon}${invoice.shdon}`;
     try {
       const requestUrl = `${this.baseUrlInvoice}/query/invoices/detail?nbmst=${invoice.nbmst}&khhdon=${invoice.khhdon}&shdon=${invoice.shdon}&khmshdon=${invoice.khmshdon}`;
-      Logger.log(`Fetching detail from URL: ${requestUrl}`);
-      const keyDetail = `${invoice.khmshdon}${invoice.khhdon}${invoice.shdon}`;
       const cachedDetail = await this.redisService.hget(
         `detail_${invoice.nbmst}`,
         keyDetail,
       );
-      if (cachedDetail) {
+      if (cachedDetail || cachedDetail == '') {
         return cachedDetail;
       }
+      if (useCache) {
+        return '';
+      }
+
       const res = await axios.get(requestUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1278,12 +1372,22 @@ export class InvoiceService {
         diengiai,
         30 * 24 * 60 * 60,
       );
-      await new Promise((resolve) => setTimeout(resolve, 550));
+      Logger.log(`Fetching detail from URL: ${requestUrl} => Done`);
+      await new Promise((resolve) => setTimeout(resolve, 700));
       return diengiai;
     } catch (error) {
       Logger.error(
         `Error fetching invoice detail: ${error.response?.data?.message || error.message}`,
       );
+      if (error.response?.data?.message === 'Không có quyền xem hóa đơn này') {
+        await this.redisService.hset(
+          `detail_${invoice.nbmst}`,
+          keyDetail,
+          'Không có quyền xem hóa đơn này',
+          30 * 24 * 60 * 60,
+        );
+        return 'Không có quyền xem hóa đơn này';
+      }
       return 'error';
     }
   }

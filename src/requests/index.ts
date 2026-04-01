@@ -45,11 +45,19 @@ export interface InvoiceData {
   khmshdgoc: string | null; // Ký hiệu mẫu số hóa đơn gốc (nếu có)
   khhdgoc: string | null; // Ký hiệu hóa đơn gốc (nếu có)
   shdgoc: string | null; // Số hóa đơn gốc (nếu có)
+  diengiai: string; // Diễn giải
 }
 
-export interface InvoiceSoldData extends Omit<InvoiceData, 'nbmst' | 'nbten' | 'tgtphi'> {}
+export interface InvoiceSoldData extends Omit<
+  InvoiceData,
+  'nbmst' | 'nbten' | 'tgtphi'
+> {}
 
-export interface InvoicePurchaseData extends Omit<InvoiceData, 'nmmst' | 'nmten'> {}
+export interface InvoicePurchaseData extends Omit<
+  InvoiceData,
+  'nmmst' | 'nmten'
+> {}
+
 export interface UserInvoiceData {
   sott: number;
   codehd: string;

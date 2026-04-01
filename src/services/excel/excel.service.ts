@@ -1,17 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { InvoiceData, UserInvoiceData } from 'src/requests';
 import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
 
 @Injectable()
 export class ExcelService {
   constructor() {}
 
-  async readExcelFromBufferToJSON<T>(
+  public readExcelFromBufferToJSON<T>(
     buffer: Buffer,
     stringPattern: string,
-  ): Promise<T> {
+  ): T {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
     const sheetName = workbook.SheetNames[0];
@@ -68,7 +67,7 @@ export class ExcelService {
     const taxWorksheet = workbook.addWorksheet('Hoá đơn điện tử');
 
     if (myErrorData.length > 0) {
-      const headers = Object.keys(myErrorData[0]);
+      const headers = Object.keys(myErrorData[0] as object);
 
       myWorksheet.columns = headers.map((key) => ({
         header: key,
@@ -88,11 +87,11 @@ export class ExcelService {
         };
       });
 
-      await this.setColumnWidthsFitData(myWorksheet);
+      this.setColumnWidthsFitData(myWorksheet);
     }
 
     if (taxErrorData.length > 0) {
-      const headers = Object.keys(taxErrorData[0]);
+      const headers = Object.keys(taxErrorData[0] as object);
 
       taxWorksheet.columns = headers.map((key) => ({
         header: TEMPLATE_EXPORT_COMPARE_RESULT[key] || key,
@@ -112,7 +111,7 @@ export class ExcelService {
         };
       });
 
-      await this.setColumnWidthsFitData(taxWorksheet);
+      this.setColumnWidthsFitData(taxWorksheet);
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -177,7 +176,7 @@ export class ExcelService {
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
-  async setColumnWidthsFitData(worksheet: ExcelJS.Worksheet, maxWidth: number = 60) {
+  setColumnWidthsFitData(worksheet: ExcelJS.Worksheet, maxWidth: number = 60) {
     worksheet.columns.forEach((column) => {
       let maxLength = 10;
 

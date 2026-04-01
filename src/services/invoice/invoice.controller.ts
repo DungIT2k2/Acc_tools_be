@@ -14,16 +14,19 @@ import { InvoiceService } from './invoice.service';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import * as requests from 'src/requests';
 import type { Response } from 'express';
-import { TEMPLATE_EXPORT_PURCHASE_INVOICE, TEMPLATE_EXPORT_SOLD_INVOICE } from 'src/constants';
+import {
+  TEMPLATE_EXPORT_PURCHASE_INVOICE,
+  TEMPLATE_EXPORT_SOLD_INVOICE,
+} from 'src/constants';
 
 @Controller('invoice')
 export class InvoiceController {
-  constructor(private readonly InvoiceService: InvoiceService) { }
+  constructor(private readonly InvoiceService: InvoiceService) {}
 
   @Get('listLoggedInvoice')
   @HttpCode(200)
-  listLogged(@Req() req: Request): object {
-    return this.InvoiceService.listLogged(req);
+  listLogged(): object {
+    return this.InvoiceService.listLogged();
   }
 
   @Post('loginInvoice')
@@ -44,7 +47,8 @@ export class InvoiceController {
   @Get('getPurchaseInvoice')
   @HttpCode(200)
   getPurchaseInvoice(
-    @Query() query: { from: string; to: string; renew?: string },
+    @Query()
+    query: { from: string; to: string; renew?: string; renewDetail?: string },
     @Req() req: Request,
   ): object {
     return this.InvoiceService.getPurchaseInvoice(req, query);
@@ -57,7 +61,12 @@ export class InvoiceController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const buffer = await this.InvoiceService.exportInvoice(req, query, TEMPLATE_EXPORT_PURCHASE_INVOICE, 'getPurchaseInvoice');
+    const buffer = await this.InvoiceService.exportInvoice(
+      req,
+      query,
+      TEMPLATE_EXPORT_PURCHASE_INVOICE,
+      'getPurchaseInvoice',
+    );
 
     const firstDate = query.from.split(',')[query.from.split(',').length - 1];
     const lastDate = query.from.split(',')[0];
@@ -72,10 +81,7 @@ export class InvoiceController {
       'Content-Disposition',
       `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     );
-    res.setHeader(
-      'Access-Control-Expose-Headers',
-      'Content-Disposition',
-    );
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
     res.setHeader('Content-Length', buffer.length);
 
@@ -83,11 +89,7 @@ export class InvoiceController {
   }
 
   @Post('comparePurchaseInvoice')
-  @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'File', maxCount: 1 },
-    ]),
-  )
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 1 }]))
   @HttpCode(200)
   comparePurchaseInvoice(
     @UploadedFiles() files: { File?: File[] },
@@ -100,7 +102,8 @@ export class InvoiceController {
   @Get('getSoldInvoice')
   @HttpCode(200)
   getSoldInvoice(
-    @Query() query: { from: string; to: string, renew?: string },
+    @Query()
+    query: { from: string; to: string; renew?: string; renewDetail?: string },
     @Req() req: Request,
   ): object {
     return this.InvoiceService.getSoldInvoice(req, query);
@@ -113,7 +116,12 @@ export class InvoiceController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const buffer = await this.InvoiceService.exportInvoice(req, query, TEMPLATE_EXPORT_SOLD_INVOICE, 'getSoldInvoice');
+    const buffer = await this.InvoiceService.exportInvoice(
+      req,
+      query,
+      TEMPLATE_EXPORT_SOLD_INVOICE,
+      'getSoldInvoice',
+    );
 
     const firstDate = query.from.split(',')[query.from.split(',').length - 1];
     const lastDate = query.from.split(',')[0];
@@ -128,10 +136,7 @@ export class InvoiceController {
       'Content-Disposition',
       `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     );
-    res.setHeader(
-      'Access-Control-Expose-Headers',
-      'Content-Disposition',
-    );
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
     res.setHeader('Content-Length', buffer.length);
 
@@ -139,11 +144,7 @@ export class InvoiceController {
   }
 
   @Post('compareSoldInvoice')
-  @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'File', maxCount: 1 },
-    ]),
-  )
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 1 }]))
   @HttpCode(200)
   compareSoldInvoice(
     @UploadedFiles() files: { File?: File[] },
@@ -172,10 +173,7 @@ export class InvoiceController {
       'Content-Disposition',
       `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     );
-    res.setHeader(
-      'Access-Control-Expose-Headers',
-      'Content-Disposition',
-    );
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
     res.setHeader('Content-Length', buffer.length);
 
