@@ -911,36 +911,38 @@ export class InvoiceService {
 
     if (!renewCache) {
       const dataCache = await this.redisService.get(cacheKey);
-      if (!renewDetailCache) {
-        if (dataCache) {
+      if (dataCache) {
+        if (!renewDetailCache) {
           return JSON.parse(dataCache) as object;
         }
-      }
-      const dataCacheParsed = JSON.parse(dataCache as string);
-      let { invoiceElectronicData, invoiceCashRegisterData } = dataCacheParsed;
-      if (invoiceElectronicData.length > 0) {
-        invoiceElectronicData = await this.getAllInvoiceDetailInMap(
-          invoiceElectronicData as Invoice[],
-          tokenInvoice,
-        );
-      }
-      if (invoiceCashRegisterData.length > 0) {
-        invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
-          invoiceCashRegisterData as Invoice[],
-          tokenInvoice,
-        );
-      }
-      const dataRes = {
-        invoiceElectronicData,
-        invoiceCashRegisterData,
-      };
 
-      await this.redisService.set(
-        cacheKey,
-        JSON.stringify(dataRes),
-        24 * 60 * 60 * 2,
-      );
-      return dataRes;
+        const dataCacheParsed = JSON.parse(dataCache);
+        let { invoiceElectronicData, invoiceCashRegisterData } =
+          dataCacheParsed;
+        if (invoiceElectronicData.length > 0) {
+          invoiceElectronicData = await this.getAllInvoiceDetailInMap(
+            invoiceElectronicData as Invoice[],
+            tokenInvoice,
+          );
+        }
+        if (invoiceCashRegisterData.length > 0) {
+          invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
+            invoiceCashRegisterData as Invoice[],
+            tokenInvoice,
+          );
+        }
+        const dataRes = {
+          invoiceElectronicData,
+          invoiceCashRegisterData,
+        };
+
+        await this.redisService.set(
+          cacheKey,
+          JSON.stringify(dataRes),
+          24 * 60 * 60 * 2,
+        );
+        return dataRes;
+      }
     } else {
       await this.redisService.del(cacheKey);
     }
