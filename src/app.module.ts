@@ -8,19 +8,20 @@ import { RedisModule } from './services/redis/redis.module';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [ConfigModule.forRoot({
-    isGlobal: true,
-  }), AuthModule, InvoiceModule, RedisModule],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    AuthModule,
+    InvoiceModule,
+    RedisModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(LoggingMiddleware)
-      .forRoutes('*');
-    consumer
-      .apply(VerifyMiddleware)
-      .forRoutes('/invoice');
+    consumer.apply(LoggingMiddleware).forRoutes('*');
+    consumer.apply(VerifyMiddleware).forRoutes('/invoice');
   }
 }

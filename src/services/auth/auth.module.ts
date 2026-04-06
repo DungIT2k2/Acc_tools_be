@@ -3,11 +3,16 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
 
-
 @Module({
-  imports: [JwtModule.register({ secret: 'secret-key-18032026' })],
+  imports: [
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: process.env.JWT_SECRET,
+      }),
+    }),
+  ],
   controllers: [AuthController],
   providers: [AuthService],
-  exports: [JwtModule, AuthService]
+  exports: [JwtModule, AuthService],
 })
 export class AuthModule {}
