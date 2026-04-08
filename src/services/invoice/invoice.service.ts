@@ -623,7 +623,6 @@ export class InvoiceService {
         hdbttData.tgtthue = replaceData.tgtthue;
         hdbttData.nbten = replaceData.nbten;
 
-        replaceData.nbmst = '';
         replaceData.tgtcthue = 0;
         replaceData.tgtthue = 0;
         replaceData.nbten = 'Hóa đơn thay thế';
@@ -1108,7 +1107,6 @@ export class InvoiceService {
         hdbttData.tgtthue = replaceData.tgtthue;
         hdbttData.nmten = replaceData.nmten;
 
-        replaceData.nmmst = '';
         replaceData.tgtcthue = 0;
         replaceData.tgtthue = 0;
         replaceData.nmten = 'Hóa đơn thay thế';
