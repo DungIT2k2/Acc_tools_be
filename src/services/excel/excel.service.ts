@@ -74,12 +74,40 @@ export class ExcelService {
     workbook.SheetNames.forEach((sheetName) => {
       const worksheet = workbook.Sheets[sheetName];
 
+      this.fillMergedCells(worksheet);
+
       result[sheetName] = XLSX.utils.sheet_to_json(worksheet, {
         defval: null,
       });
     });
 
     return result;
+  }
+
+  private fillMergedCells(worksheet: XLSX.WorkSheet) {
+    const merges = worksheet['!merges'] || [];
+
+    merges.forEach((merge) => {
+      const startCell = XLSX.utils.encode_cell(merge.s);
+      const startValue = worksheet[startCell]?.v;
+
+      if (startValue == null) return;
+
+      for (let row = merge.s.r; row <= merge.e.r; row++) {
+        for (let col = merge.s.c; col <= merge.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+
+          const cell = worksheet[cellAddress];
+
+          if (!cell || cell.v == null) {
+            worksheet[cellAddress] = {
+              v: startValue,
+              t: typeof startValue === 'number' ? 'n' : 's',
+            };
+          }
+        }
+      }
+    });
   }
 
   async exportCompareResultToExcelBuffer(

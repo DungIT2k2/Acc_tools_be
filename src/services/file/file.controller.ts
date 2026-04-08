@@ -27,14 +27,14 @@ export class FileController {
     return this.fileService.getHeaderInFile(files, req);
   }
 
-  // @Post('compareFile')
-  // @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 2 }]))
-  // @HttpCode(200)
-  // compareFile(
-  //   @UploadedFiles() files: { File?: File[] },
-  //   @Body() formData: { condition: string },
-  //   @Req() req: Request,
-  // ): object {
-  //   return this.fileService.compareFile(files, formData, req);
-  // }
+  @Post('compareFile')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 2 }]))
+  @HttpCode(200)
+  compareFile(
+    @UploadedFiles() files: { File?: File[] },
+    @Body() formData: { condition: string },
+    @Req() req: Request,
+  ): object {
+    return this.fileService.compareFile(files, formData, req);
+  }
 }
