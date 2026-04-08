@@ -6,6 +6,7 @@ import { InvoiceModule } from './services/invoice/invoice.module';
 import { LoggingMiddleware, VerifyMiddleware } from './middleware';
 import { RedisModule } from './services/redis/redis.module';
 import { ConfigModule } from '@nestjs/config';
+import { FileModule } from './services/file/file.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ConfigModule } from '@nestjs/config';
     }),
     AuthModule,
     InvoiceModule,
+    FileModule,
     RedisModule,
   ],
   controllers: [AppController],
@@ -23,5 +25,6 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggingMiddleware).forRoutes('*');
     consumer.apply(VerifyMiddleware).forRoutes('/invoice');
+    consumer.apply(VerifyMiddleware).forRoutes('/file');
   }
 }

@@ -7,6 +7,31 @@ import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
 export class ExcelService {
   constructor() {}
 
+  public getHeaderInExcelBuffer(buffer: Buffer): object[] {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    // Lấy danh sách sheet
+    const sheetNames = workbook.SheetNames;
+
+    const result = sheetNames.map((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+
+      const header =
+        XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          range: 0,
+          blankrows: false,
+        })[0] || [];
+
+      return {
+        sheetName,
+        header,
+      };
+    });
+
+    return result;
+  }
+
   public readExcelFromBufferToJSON<T>(
     buffer: Buffer,
     stringPattern: string,
