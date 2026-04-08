@@ -665,7 +665,7 @@ export class InvoiceService {
       }
       myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.trim();
-      const sohd = Number(data.sohd?.trim()).toString();
+      const sohd = Number(data.sohd.toString()?.trim()).toString();
       const masothue = data.masothue?.trim();
       const nghdchr = data.nghdchr;
 
