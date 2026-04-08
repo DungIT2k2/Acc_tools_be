@@ -20,6 +20,7 @@ export class FileService {
     return result;
   }
 
-  public compareFile(files: any, formData: { condition: string }, req: Request): object {
-    const myFiles = files?.File;
+  // public compareFile(files: any, formData: { condition: string }, req: Request): void {
+  //   const myFiles = files?.File;
+  // }
 }
