@@ -1125,8 +1125,7 @@ export class InvoiceService {
         const hdbdcData = taxDataMap.get(hdbdckey) as InvoiceSoldData;
         const AdjustData = taxDataMap.get(key) as InvoiceSoldData;
         if (hdbdcData.tgtttbso + AdjustData.tgtttbso == 0) {
-          taxDataMap.delete(key);
-          taxDataMap.delete(hdbdckey);
+          //Hoá đơn bán ra phải kiểm tra để đảm bảo tính liên tục
           return;
         }
         hdbdcData.tgtcthue = hdbdcData.tgtcthue + AdjustData.tgtcthue;
