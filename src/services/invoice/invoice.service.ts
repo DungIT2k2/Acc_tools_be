@@ -1087,8 +1087,8 @@ export class InvoiceService {
         taxReplaceMap.set(keyNoMst, hdbttkey);
       }
       if (tax.tthai == 'Hóa đơn điều chỉnh') {
-        const hdbdckey = `${tax.khmshdgoc}${tax.khhdgoc}${tax.shdgoc}${tax.nmmst}`;
-        taxAdjustMap.set(key, hdbdckey);
+        const hdbdckey = `${tax.khmshdgoc}${tax.khhdgoc}${tax.shdgoc}`;
+        taxAdjustMap.set(keyNoMst, hdbdckey);
       }
       taxDataMap.set(key, tax);
       taxDataNoMstMap.set(keyNoMst, tax);
@@ -1121,15 +1121,31 @@ export class InvoiceService {
     });
 
     taxAdjustMap.forEach((hdbdckey, key) => {
-      if (taxDataMap.has(hdbdckey)) {
-        const hdbdcData = taxDataMap.get(hdbdckey) as InvoiceSoldData;
-        const AdjustData = taxDataMap.get(key) as InvoiceSoldData;
-        if (hdbdcData.tgtttbso + AdjustData.tgtttbso == 0) {
-          //Hoá đơn bán ra phải kiểm tra để đảm bảo tính liên tục
-          return;
-        }
+      if (taxDataNoMstMap.has(hdbdckey)) {
+        const hdbdcData = taxDataNoMstMap.get(hdbdckey) as InvoiceSoldData;
+        const AdjustData = taxDataNoMstMap.get(key) as InvoiceSoldData;
+        const keyHdbdc = `${hdbdcData.khmshdon}${hdbdcData.khhdon}${hdbdcData.shdon}${hdbdcData.nmmst}`;
+        const keyAdjust = `${AdjustData.khmshdon}${AdjustData.khhdon}${AdjustData.shdon}${AdjustData.nmmst}`;
+        // if (hdbdcData.tgtttbso + AdjustData.tgtttbso == 0) {
+        //   hdbdcData.tgtcthue = 0;
+        //   hdbdcData.tgtthue = 0;
+        //   AdjustData.tgtcthue = 0;
+        //   AdjustData.tgtthue = 0;
+        //   //Hoá đơn bán ra phải kiểm tra để đảm bảo tính liên tục
+        //   return;
+        // }
+        hdbdcData.nmmst = AdjustData.nmmst;
         hdbdcData.tgtcthue = hdbdcData.tgtcthue + AdjustData.tgtcthue;
         hdbdcData.tgtthue = hdbdcData.tgtthue + AdjustData.tgtthue;
+        AdjustData.tgtcthue = 0;
+        AdjustData.tgtthue = 0;
+
+        const newKeyHdbdc = `${hdbdcData.khmshdon}${hdbdcData.khhdon}${hdbdcData.shdon}${hdbdcData.nmmst}`;
+        const newKeyAdjust = `${AdjustData.khmshdon}${AdjustData.khhdon}${AdjustData.shdon}${AdjustData.nmmst}`;
+        taxDataMap.delete(keyHdbdc);
+        taxDataMap.delete(keyAdjust);
+        taxDataMap.set(newKeyHdbdc, hdbdcData);
+        taxDataMap.set(newKeyAdjust, AdjustData);
       }
     });
 
