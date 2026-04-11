@@ -106,7 +106,7 @@ export class FileService {
         5 * 60,
       );
 
-      return { onlyInFile1, onlyInFile2 };
+      return { onlyInFile1, onlyInFile2, record: keyRecord };
     } else {
       Logger.log('Có so sánh chính xác => sử dụng map');
       const mapDataFile2 = new Map<string, any[]>();
@@ -180,6 +180,7 @@ export class FileService {
       return {
         onlyInFile1,
         onlyInFile2,
+        record: keyRecord,
       };
     }
   }
@@ -244,5 +245,25 @@ export class FileService {
     if (values.every((v) => v == null)) return null;
 
     return values.map((v) => v ?? '').join('|');
+  }
+
+  public async exportCompareResult(query: {
+    record: string; sheetNames: string[];
+  }): Promise<Buffer> {
+    const recordKey = query?.record;
+    const sheetNames = query?.sheetNames || ['File 1', 'File 2'];
+    if (!recordKey)
+      throw new HttpException('Record không hợp lệ', HttpStatus.BAD_REQUEST);
+
+    const data = await this.redisService.get(recordKey);
+    if (!data) {
+      throw new HttpException('Không tìm thấy kết quả', HttpStatus.NOT_FOUND);
+    }
+    const parsedData = JSON.parse(data);
+    const { dataOnlyInFile1, dataOnlyInFile2 } = parsedData;
+    return this.excelService.exportMultiSheetToExcelBuffer(
+      [dataOnlyInFile1 as any[], dataOnlyInFile2 as any[]],
+      sheetNames,
+    );
   }
 }

@@ -171,6 +171,47 @@ export class ExcelService {
     return Buffer.from(buffer);
   }
 
+  async exportMultiSheetToExcelBuffer(
+    dataSheets: any[][],
+    sheetNames: string[],
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+
+    for (let i = 0; i < dataSheets.length; i++) {
+      const data = dataSheets[i];
+      const sheetName = sheetNames[i] || `Sheet${i + 1}`;
+
+      const worksheet = workbook.addWorksheet(sheetName);
+
+      if (!data || data.length === 0) continue;
+
+      const headers = Object.keys(data[0] as object);
+
+      worksheet.columns = headers.map((key) => ({
+        header: key,
+        key: key,
+        width: 20,
+      }));
+
+      worksheet.addRows(data);
+
+      worksheet.getRow(1).font = { bold: true };
+
+      worksheet.columns.forEach((col) => {
+        col.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
+      });
+
+      this.setColumnWidthsFitData(worksheet);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
   async exportJSONToExcelBuffer(
     data: any[],
     header: Record<string, string>,

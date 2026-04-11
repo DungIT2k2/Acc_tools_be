@@ -1318,6 +1318,9 @@ export class InvoiceService {
 
   async exportCompareResult(query: { record: string }): Promise<Buffer> {
     const { record } = query;
+    if (!record) {
+      throw new HttpException('Record không hợp lệ', HttpStatus.BAD_REQUEST);
+    }
     const data = await this.redisService.get(record);
     if (!data) {
       throw new HttpException('Không tìm thấy kết quả', HttpStatus.NOT_FOUND);
