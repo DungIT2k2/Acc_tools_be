@@ -84,6 +84,32 @@ export class ExcelService {
     return result;
   }
 
+  readSheets(buffer: Buffer, sheetNames?: string | string[]) {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    const result: Record<string, any[]> = {};
+
+    const targetSheets = sheetNames
+      ? Array.isArray(sheetNames)
+        ? sheetNames
+        : [sheetNames]
+      : workbook.SheetNames;
+
+    for (const sheetName of targetSheets) {
+      const worksheet = workbook.Sheets[sheetName];
+
+      if (!worksheet) continue; // tránh lỗi nếu sheet không tồn tại
+
+      this.fillMergedCells(worksheet);
+
+      result[sheetName] = XLSX.utils.sheet_to_json(worksheet, {
+        defval: null,
+      });
+    }
+
+    return result;
+  }
+
   private fillMergedCells(worksheet: XLSX.WorkSheet) {
     const merges = worksheet['!merges'] || [];
 

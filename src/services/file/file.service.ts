@@ -39,9 +39,19 @@ export class FileService {
     if (myFiles.length == 1) {
       const myFile = myFiles[0];
       const myFileBuffer: Buffer = myFile?.buffer;
-      const data = this.excelService.readAllSheets(myFileBuffer);
+      const data = this.excelService.readSheets(myFileBuffer, [sheetNameFile1, sheetNameFile2]);
       dataFile1 = data[sheetNameFile1];
       dataFile2 = data[sheetNameFile2];
+    }
+    if (myFiles.length == 2) {
+      const myFile1 = myFiles[0];
+      const myFile2 = myFiles[1];
+      const myFileBuffer1: Buffer = myFile1?.buffer;
+      const myFileBuffer2: Buffer = myFile2?.buffer;
+      const data1 = this.excelService.readSheets(myFileBuffer1, sheetNameFile1);
+      const data2 = this.excelService.readSheets(myFileBuffer2, sheetNameFile2);
+      dataFile1 = data1[sheetNameFile1];
+      dataFile2 = data2[sheetNameFile2];
     }
     const { newMapping, likeMapping } = mapping.reduce(
       (res: { newMapping: any[]; likeMapping: any[] }, item: any) => {
