@@ -379,7 +379,9 @@ export class InvoiceService {
                         ? 'Hóa đơn đã bị thay thế'
                         : invoice.tthai == 5
                           ? 'Hóa đơn đã bị điều chỉnh'
-                          : invoice.tthai,
+                          : invoice.tthai == 6
+                            ? 'Hóa đơn đã bị hủy'
+                            : invoice.tthai,
               nmdchi: invoice.nmdchi,
               khmshdgoc: invoice.khmshdgoc,
               khhdgoc: invoice.khhdgoc,
@@ -581,6 +583,8 @@ export class InvoiceService {
         });
         continue;
       }
+      if (tax.tthai == 'Hóa đơn đã bị hủy') continue;
+
       if (
         tax.tthai !== 'Hóa đơn mới' &&
         tax.tthai !== 'Hóa đơn thay thế' &&
@@ -1064,6 +1068,8 @@ export class InvoiceService {
         });
         continue;
       }
+      if (tax.tthai == 'Hóa đơn đã bị hủy') continue;
+
       if (
         tax.tthai !== 'Hóa đơn mới' &&
         tax.tthai !== 'Hóa đơn thay thế' &&
