@@ -669,7 +669,7 @@ export class InvoiceService {
       myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.trim();
       const sohd = Number(data.sohd.toString()?.trim()).toString();
-      const masothue = data.masothue?.trim() == '-' ? '' : data.masothue?.trim() ? data.masothue.trim() : '';
+      const masothue = data?.masothue?.trim() == '-' ? '' : data?.masothue?.trim() ? data?.masothue.trim() : '';
       const nghdchr = data.nghdchr;
 
       if (!serihd) {
@@ -716,7 +716,7 @@ export class InvoiceService {
       }
       myDataMap.set(key, data);
 
-      Logger.log(`[${stt}] Find key ${key} in tax data map`);
+      // Logger.log(`[${stt}] Find key ${key} in tax data map`);
       const matchData = taxDataMap.get(key);
 
       if (matchData) {
@@ -1170,7 +1170,7 @@ export class InvoiceService {
       myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.trim();
       const sohd = Number(data.sohd?.trim()).toString();
-      const masothue = data.masothue?.trim() == '-' ? '' : data?.masothue?.trim() ? data.masothue.trim() : '';
+      const masothue = data?.masothue?.trim() == '-' ? '' : data?.masothue?.trim() ? data?.masothue?.trim() : '';
       const nghdchr = data.nghdchr;
 
       if (!serihd) {
@@ -1207,7 +1207,7 @@ export class InvoiceService {
       }
       myDataMap.set(key, data);
 
-      Logger.log(`[${stt}] Find key ${key} in tax data map`);
+      // Logger.log(`[${stt}] Find key ${key} in tax data map`);
       const matchData = taxDataMap.get(key);
 
       if (matchData) {
