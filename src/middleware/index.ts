@@ -19,7 +19,7 @@ export class LoggingMiddleware implements NestMiddleware {
         res.setHeader('X-Transaction-Id', txId);
 
         requestContext.run({ txId }, () => {
-            if (body.password) {
+            if (body?.password) {
                 body.password = '******';
             }
 
