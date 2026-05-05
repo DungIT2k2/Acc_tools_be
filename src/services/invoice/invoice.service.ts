@@ -670,7 +670,14 @@ export class InvoiceService {
       const serihd = data.serihd?.toString().trim();
       const sohd = Number(data.sohd.toString()?.trim()).toString();
       const masothue = !data?.masothue ? '' : data?.masothue?.toString().trim() == '-' ? '' : data?.masothue?.toString().trim();
-      const nghdchr = data.nghdchr;
+      let nghdchr = data.nghdchr;
+      if (typeof nghdchr === 'number' && nghdchr > 0) {
+        const excelDate = new Date((nghdchr - 25569) * 86400 * 1000);
+        const day = String(excelDate.getDate()).padStart(2, '0');
+        const month = String(excelDate.getMonth() + 1).padStart(2, '0');
+        const year = excelDate.getFullYear();
+        nghdchr = `${day}/${month}/${year}`;
+      }
 
       if (!serihd) {
         myErrorArr.push({
@@ -804,7 +811,7 @@ export class InvoiceService {
         item.row as number,
       ) as UserInvoiceData;
       if (originalData) {
-        myErrorData.push(originalData);
+        myErrorData.push({ ...originalData, ghichu: item.description });
       }
     });
 
@@ -813,7 +820,7 @@ export class InvoiceService {
         item.row as number,
       ) as InvoicePurchaseData;
       if (originalData) {
-        taxErrorData.push(originalData);
+        taxErrorData.push({ ...originalData, diengiai: item.description });
       }
     });
 
@@ -1171,7 +1178,14 @@ export class InvoiceService {
       const serihd = data.serihd?.toString().trim();
       const sohd = Number(data.sohd?.toString().trim()).toString();
       const masothue = !data?.masothue ? '' : data?.masothue?.toString().trim() == '-' ? '' : data?.masothue?.toString().trim();
-      const nghdchr = data.nghdchr;
+      let nghdchr = data.nghdchr;
+      if (typeof nghdchr === 'number' && nghdchr > 0) {
+        const excelDate = new Date((nghdchr - 25569) * 86400 * 1000);
+        const day = String(excelDate.getDate()).padStart(2, '0');
+        const month = String(excelDate.getMonth() + 1).padStart(2, '0');
+        const year = excelDate.getFullYear();
+        nghdchr = `${day}/${month}/${year}`;
+      }
 
       if (!serihd) {
         myErrorArr.push({
@@ -1295,7 +1309,7 @@ export class InvoiceService {
         item.row as number,
       ) as UserInvoiceData;
       if (originalData) {
-        myErrorData.push(originalData);
+        myErrorData.push({ ...originalData, ghichu: item.description });
       }
     });
 
@@ -1304,7 +1318,7 @@ export class InvoiceService {
         item.row as number,
       ) as InvoiceSoldData;
       if (originalData) {
-        taxErrorData.push(originalData);
+        taxErrorData.push({ ...originalData, diengiai: item.description });
       }
     });
 
