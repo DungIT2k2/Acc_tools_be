@@ -17,7 +17,7 @@ import { parseDate } from 'src/utils';
 export class InvoiceService {
   private readonly accInvoiceMap = new Map<string, object>();
   private readonly invoiceMemCache = new Map<string, object>();
-  private readonly baseUrlInvoice = 'https://hoadondientu.gdt.gov.vn:30000';
+  private readonly baseUrlInvoice = 'https://hoadondientu.gdt.gov.vn/api';
   constructor(
     private readonly excelService: ExcelService,
     private readonly authService: AuthService,
