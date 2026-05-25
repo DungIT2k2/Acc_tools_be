@@ -8,7 +8,7 @@ import { toUnicode } from 'vietnamese-conversion';
 export class ExcelService {
   constructor() {}
 
-  private repairMixedWord(word: string): string {
+  private repairMixedText(text: string): string {
     const toneMap: Record<string, string> = {
       ù: '\u0301',
       Ù: '\u0301',
@@ -26,14 +26,14 @@ export class ExcelService {
       Ï: '\u0323',
     };
 
-    const repairable = 'ơưƠƯôÔ';
+    const repairable = 'ơưƠƯôÔyY';
 
     let result = '';
     let i = 0;
 
-    while (i < word.length) {
-      const current = word[i];
-      const next = word[i + 1];
+    while (i < text.length) {
+      const current = text[i];
+      const next = text[i + 1];
 
       if (repairable.includes(current) && next && toneMap[next]) {
         result += (current + toneMap[next]).normalize('NFC');
@@ -50,17 +50,12 @@ export class ExcelService {
   }
 
   private convertEncoding(text: string): string {
-    return text
-      .split(' ')
-      .map((word) => {
-        // còn lại để thư viện xử lý
-        word = toUnicode(word, 'vni');
+    // còn lại để thư viện xử lý
+    text = toUnicode(text, 'vni');
 
-        // sửa case lai trước
-        word = this.repairMixedWord(word);
-        return word;
-      })
-      .join(' ');
+    // sửa case lai trước
+    text = this.repairMixedText(text);
+    return text;
   }
 
   public async transcodingExcelBuffer(buffer: any, type: string) {
