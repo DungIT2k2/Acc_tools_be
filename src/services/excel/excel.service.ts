@@ -1,34 +1,49 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
-import { detectCharset, toUnicode, toVNI } from 'vietnamese-conversion';
+import { toUnicode } from 'vietnamese-conversion';
 
 @Injectable()
 export class ExcelService {
   constructor() {}
 
   private repairMixedWord(word: string): string {
-    const map: Record<string, string> = {
-      ơù: 'ớ',
-      ôù: 'ớ',
-      ôõ: 'ỡ',
+    const toneMap: Record<string, string> = {
+      ù: '\u0301',
+      Ù: '\u0301',
 
-      ÖÏ: 'Ự',
-      öï: 'ự',
-      öõ: 'ữ',
-      öû: 'ử',
-      öø: 'ừ',
-      öù: 'ứ',
+      ø: '\u0300',
+      Ø: '\u0300',
 
-      ươø: 'ườ',
+      û: '\u0309',
+      Û: '\u0309',
 
-      öôø: 'ườ',
+      õ: '\u0303',
+      Õ: '\u0303',
+
+      ï: '\u0323',
+      Ï: '\u0323',
     };
-    let result = word;
 
-    for (const [k, v] of Object.entries(map)) {
-      result = result.replaceAll(k, v);
+    const repairable = 'ơưƠƯôÔ';
+
+    let result = '';
+    let i = 0;
+
+    while (i < word.length) {
+      const current = word[i];
+      const next = word[i + 1];
+
+      if (repairable.includes(current) && next && toneMap[next]) {
+        result += (current + toneMap[next]).normalize('NFC');
+
+        i += 2;
+        continue;
+      }
+
+      result += current;
+      i++;
     }
 
     return result;
@@ -38,11 +53,12 @@ export class ExcelService {
     return text
       .split(' ')
       .map((word) => {
+        // còn lại để thư viện xử lý
+        word = toUnicode(word, 'vni');
+
         // sửa case lai trước
         word = this.repairMixedWord(word);
-
-        // còn lại để thư viện xử lý
-        return toUnicode(word, 'vni');
+        return word;
       })
       .join(' ');
   }
