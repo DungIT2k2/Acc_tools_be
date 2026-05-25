@@ -1,12 +1,43 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
-import { toUnicode } from 'vietnamese-conversion';
+import { detectCharset, toUnicode, toVNI } from 'vietnamese-conversion';
 
 @Injectable()
 export class ExcelService {
   constructor() {}
+
+  private repairMixedWord(word: string): string {
+    const map: Record<string, string> = {
+      // lớp
+      ơù: 'ớ',
+      ôù: 'ớ',
+
+      // LỰC
+      ÖÏ: 'Ự',
+    };
+    let result = word;
+
+    for (const [k, v] of Object.entries(map)) {
+      result = result.replaceAll(k, v);
+    }
+
+    return result;
+  }
+
+  private convertEncoding(text: string): string {
+    return text
+      .split(' ')
+      .map((word) => {
+        // sửa case lai trước
+        word = this.repairMixedWord(word);
+
+        // còn lại để thư viện xử lý
+        return toUnicode(word, 'vni');
+      })
+      .join(' ');
+  }
 
   public async transcodingExcelBuffer(buffer: any, type: string) {
     const workbook = new ExcelJS.Workbook();
@@ -17,8 +48,12 @@ export class ExcelService {
       worksheet.eachRow((row) => {
         row.eachCell((cell) => {
           if (typeof cell.value === 'string') {
-            cell.value = toUnicode(cell.value, 'vni');
+            cell.value = this.convertEncoding(cell.value);
           }
+          cell.font = {
+            ...cell.font,
+            name: 'Times New Roman',
+          };
         });
       });
     });
