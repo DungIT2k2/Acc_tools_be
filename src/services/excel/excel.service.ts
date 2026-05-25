@@ -10,12 +10,20 @@ export class ExcelService {
 
   private repairMixedWord(word: string): string {
     const map: Record<string, string> = {
-      // lớp
       ơù: 'ớ',
       ôù: 'ớ',
+      ôõ: 'ỡ',
 
-      // LỰC
       ÖÏ: 'Ự',
+      öï: 'ự',
+      öõ: 'ữ',
+      öû: 'ử',
+      öø: 'ừ',
+      öù: 'ứ',
+
+      ươø: 'ườ',
+
+      öôø: 'ườ',
     };
     let result = word;
 
