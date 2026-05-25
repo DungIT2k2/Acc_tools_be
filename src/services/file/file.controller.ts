@@ -13,6 +13,7 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { FileService } from './file.service';
 import type { Response } from 'express';
+import moment from 'moment';
 
 @Controller('file')
 export class FileController {
@@ -42,13 +43,44 @@ export class FileController {
   @Post('exportCompareResult')
   @HttpCode(200)
   async exportCompareResult(
-    @Body() body: { record: string, sheetNames: string[] },
+    @Body() body: { record: string; sheetNames: string[] },
     @Req() req: Request,
     @Res() res: Response,
   ) {
     const buffer = await this.fileService.exportCompareResult(body);
 
     const fileName = `ket-qua-so-sanh-${req['user']['username']}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+
+    res.setHeader('Content-Length', buffer.length);
+
+    return res.send(buffer);
+  }
+
+  @Post('transcoding')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 1 }]))
+  @HttpCode(200)
+  async transcoding(
+    @UploadedFiles() files: { File?: File[] },
+    @Body() formData: { type: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const { result: buffer, nameFile } = await this.fileService.transcoding(
+      files,
+      formData,
+    );
+    const time = moment().format('HHmmss');
+    const fileName = `${nameFile}-New-${time}.xlsx`;
 
     res.setHeader(
       'Content-Type',

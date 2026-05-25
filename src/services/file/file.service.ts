@@ -39,7 +39,10 @@ export class FileService {
     if (myFiles.length == 1) {
       const myFile = myFiles[0];
       const myFileBuffer: Buffer = myFile?.buffer;
-      const data = this.excelService.readSheets(myFileBuffer, [sheetNameFile1, sheetNameFile2]);
+      const data = this.excelService.readSheets(myFileBuffer, [
+        sheetNameFile1,
+        sheetNameFile2,
+      ]);
       dataFile1 = data[sheetNameFile1];
       dataFile2 = data[sheetNameFile2];
     }
@@ -258,7 +261,8 @@ export class FileService {
   }
 
   public async exportCompareResult(query: {
-    record: string; sheetNames: string[];
+    record: string;
+    sheetNames: string[];
   }): Promise<Buffer> {
     const recordKey = query?.record;
     const sheetNames = query?.sheetNames || ['File 1', 'File 2'];
@@ -275,5 +279,18 @@ export class FileService {
       [dataOnlyInFile1 as any[], dataOnlyInFile2 as any[]],
       sheetNames,
     );
+  }
+
+  public async transcoding(
+    files: any,
+    formData: { type: string },
+  ): Promise<{ result: Buffer; nameFile: string }> {
+    const myFile = files?.File?.[0];
+    const nameFile = myFile?.originalname.slice(0, -5);
+    const result = await this.excelService.transcodingExcelBuffer(
+      myFile?.buffer,
+      formData.type,
+    );
+    return { result, nameFile };
   }
 }

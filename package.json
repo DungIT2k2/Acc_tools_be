@@ -32,6 +32,7 @@
     "moment-timezone": "^0.6.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "vietnamese-conversion": "^2.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

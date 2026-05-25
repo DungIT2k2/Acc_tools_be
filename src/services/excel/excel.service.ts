@@ -2,10 +2,31 @@ import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
+import { toUnicode } from 'vietnamese-conversion';
 
 @Injectable()
 export class ExcelService {
   constructor() {}
+
+  public async transcodingExcelBuffer(buffer: any, type: string) {
+    const workbook = new ExcelJS.Workbook();
+
+    await workbook.xlsx.load(buffer as ExcelJS.Buffer);
+
+    workbook.eachSheet((worksheet) => {
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          if (typeof cell.value === 'string') {
+            cell.value = toUnicode(cell.value, 'vni');
+          }
+        });
+      });
+    });
+
+    const output = await workbook.xlsx.writeBuffer();
+
+    return Buffer.from(output);
+  }
 
   public getHeaderInExcelBuffer(buffer: Buffer): object[] {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
