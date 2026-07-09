@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
 import { toUnicode } from 'vietnamese-conversion';
+import { UserInvoiceDataNew } from 'src/requests';
 
 @Injectable()
 export class ExcelService {
@@ -127,18 +128,43 @@ export class ExcelService {
     );
 
     if (headerIndex === -1) {
-      throw new Error('File không đúng format');
+      // throw new Error('File không đúng format');
+      const data: UserInvoiceDataNew[] = [];
+      raw.forEach((row) => {
+        const dataRow: UserInvoiceDataNew = {
+          sott: row[0],
+          formhd: row[1],
+          serihd: row[2],
+          sohd: row[3],
+          nghdchr: row[4],
+          company: row[5],
+          masothue: row[6],
+          mathang: row[7],
+          sotien_net: row[9],
+          thuesuat: row.length == 12 ? null : row[10],
+          sotien_tax: row.length == 12 ? row[10] : row[11],
+          ghichu: row.length == 12 ? row[11] : row[12],
+        };
+        if (
+          typeof dataRow.sott === 'number' &&
+          typeof dataRow.serihd === 'string' &&
+          dataRow.serihd.length == 7
+        ) {
+          data.push(dataRow);
+        }
+      });
+      return data as T;
+    } else {
+      const cleaned = raw.slice(headerIndex);
+
+      const newWorksheet = XLSX.utils.aoa_to_sheet(cleaned);
+
+      const data = XLSX.utils.sheet_to_json(newWorksheet, {
+        defval: null,
+      });
+
+      return data as T;
     }
-
-    const cleaned = raw.slice(headerIndex);
-
-    const newWorksheet = XLSX.utils.aoa_to_sheet(cleaned);
-
-    const data = XLSX.utils.sheet_to_json(newWorksheet, {
-      defval: null,
-    });
-
-    return data as T;
   }
 
   readAllSheets(buffer: Buffer) {
@@ -374,6 +400,10 @@ export class ExcelService {
   setColumnWidthsFitData(worksheet: ExcelJS.Worksheet, maxWidth: number = 60) {
     worksheet.columns.forEach((column) => {
       let maxLength = 10;
+
+      if (column.key === 'nghdchr') {
+        column.numFmt = 'dd/mm/yyyy';
+      }
 
       column.eachCell?.((cell, rowNumber) => {
         if (rowNumber === 1) return;

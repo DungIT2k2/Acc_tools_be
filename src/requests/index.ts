@@ -75,6 +75,11 @@ export interface UserInvoiceData {
   ghichu: string;
 }
 
+export interface UserInvoiceDataNew extends Omit<
+  UserInvoiceData,
+  'codehd' | 'nghd'
+> {}
+
 export interface LogginInvoiceReq {
   username: string;
   password?: string;
