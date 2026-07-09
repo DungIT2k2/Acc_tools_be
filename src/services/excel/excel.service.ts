@@ -150,6 +150,8 @@ export class ExcelService {
           typeof dataRow.serihd === 'string' &&
           dataRow.serihd.length == 7
         ) {
+          const d = XLSX.SSF.parse_date_code(dataRow.nghdchr);
+          dataRow.nghdchr = `${String(d.d).padStart(2, '0')}/${String(d.m).padStart(2, '0')}/${d.y}`;
           data.push(dataRow);
         }
       });
