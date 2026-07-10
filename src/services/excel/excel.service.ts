@@ -67,6 +67,9 @@ export class ExcelService {
     workbook.eachSheet((worksheet) => {
       worksheet.eachRow((row) => {
         row.eachCell((cell) => {
+          if (cell.master !== cell) {
+            return;
+          }
           if (typeof cell.value === 'string') {
             cell.value = this.convertEncoding(cell.value);
           }
