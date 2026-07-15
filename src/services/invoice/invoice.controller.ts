@@ -44,6 +44,16 @@ export class InvoiceController {
     return this.InvoiceService.handleLogoutInvoice(req);
   }
 
+  @Get('getDetailInvoice')
+  @HttpCode(200)
+  getDetailInvoice(
+    @Query()
+    query: { nbmst: string; khhdon: string; shdon?: string; khmshdon?: string },
+    @Req() req: Request,
+  ): object {
+    return this.InvoiceService.getDetailInvoice(req, query);
+  }
+
   @Get('getPurchaseInvoice')
   @HttpCode(200)
   getPurchaseInvoice(

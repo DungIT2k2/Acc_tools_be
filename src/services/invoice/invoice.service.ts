@@ -132,6 +132,18 @@ export class InvoiceService {
     return { access_token };
   }
 
+  async getDetailInvoice(req: any, query: { nbmst: string; khhdon: string; shdon?: string; khmshdon?: string }): Promise<object> {
+    const { nbmst, khhdon, shdon, khmshdon } = query;
+    const usernameInvoice = req['user']['usernameInvoice'];
+    const key = `invoice_${usernameInvoice}`;
+    const cacheKey = `detail_${usernameInvoice}_${nbmst}_${khhdon}`;
+    const token = await this.redisService.get(key);
+    if (!token)
+      throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
+    const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
+    return this.getInvoiceDetail(query as any, tokenInvoice, false, true) as object;
+  }
+
   async getPurchaseInvoice(
     req: any,
     query: { from: string; to: string; renew?: string; renewDetail?: string },
@@ -1383,7 +1395,8 @@ export class InvoiceService {
     invoice: Invoice,
     token: string,
     useCache: boolean = false,
-  ): Promise<string> {
+    fullData: boolean = false
+  ): Promise<string | object> {
     const keyDetail = `${invoice.khmshdon}${invoice.khhdon}${invoice.shdon}`;
     try {
       const requestUrl = `${this.baseUrlInvoice}/query/invoices/detail?nbmst=${invoice.nbmst}&khhdon=${invoice.khhdon}&shdon=${invoice.shdon}&khmshdon=${invoice.khmshdon}`;
@@ -1392,7 +1405,7 @@ export class InvoiceService {
         keyDetail,
       );
       if (cachedDetail || cachedDetail == '') {
-        return cachedDetail;
+        return JSON.parse(cachedDetail);
       }
       if (useCache) {
         return '';
@@ -1404,6 +1417,15 @@ export class InvoiceService {
         },
         timeout: 5000,
       });
+      if (fullData) {
+        await this.redisService.hset(
+          `detail_${invoice.nbmst}`,
+          keyDetail,
+          JSON.stringify(res?.data)
+        );
+
+        return res?.data;
+      }
       const diengiai: string = res?.data?.hdhhdvu?.[0]?.ten || '';
       await this.redisService.hset(
         `detail_${invoice.nbmst}`,
