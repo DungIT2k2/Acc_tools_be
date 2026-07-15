@@ -494,6 +494,7 @@ export class InvoiceService {
       this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
         'sott',
+        'buy',
       );
 
     const taxErrorArr: object[] = [];
@@ -1011,6 +1012,7 @@ export class InvoiceService {
       this.excelService.readExcelFromBufferToJSON<UserInvoiceData[]>(
         myFileBuffer,
         'sott',
+        'sell',
       );
 
     const taxErrorArr: object[] = [];
