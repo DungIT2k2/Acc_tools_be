@@ -132,7 +132,10 @@ export class InvoiceService {
     return { access_token };
   }
 
-  async getDetailInvoice(req: any, query: { nbmst: string; khhdon: string; shdon?: string; khmshdon?: string }): Promise<object> {
+  async getDetailInvoice(
+    req: any,
+    query: { nbmst: string; khhdon: string; shdon?: string; khmshdon?: string },
+  ): Promise<object> {
     const { nbmst, khhdon, shdon, khmshdon } = query;
     const usernameInvoice = req['user']['usernameInvoice'];
     const key = `invoice_${usernameInvoice}`;
@@ -141,7 +144,12 @@ export class InvoiceService {
     if (!token)
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
     const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
-    return this.getInvoiceDetail(query as any, tokenInvoice, false, true) as object;
+    return this.getInvoiceDetail(
+      query as any,
+      tokenInvoice,
+      false,
+      true,
+    ) as object;
   }
 
   async getPurchaseInvoice(
@@ -682,7 +690,11 @@ export class InvoiceService {
       myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.toString().trim();
       const sohd = Number(data.sohd.toString()?.trim()).toString();
-      const masothue = !data?.masothue ? '' : data?.masothue?.toString().trim() == '-' ? '' : data?.masothue?.toString().trim();
+      const masothue = !data?.masothue
+        ? ''
+        : data?.masothue?.toString().trim() == '-'
+          ? ''
+          : data?.masothue?.toString().trim();
       let nghdchr = data.nghdchr;
       if (typeof nghdchr === 'number' && nghdchr > 0) {
         const excelDate = new Date((nghdchr - 25569) * 86400 * 1000);
@@ -1191,7 +1203,11 @@ export class InvoiceService {
       myOriginalDataMap.set(stt, data);
       const serihd = data.serihd?.toString().trim();
       const sohd = Number(data.sohd?.toString().trim()).toString();
-      const masothue = !data?.masothue ? '' : data?.masothue?.toString().trim() == '-' ? '' : data?.masothue?.toString().trim();
+      const masothue = !data?.masothue
+        ? ''
+        : data?.masothue?.toString().trim() == '-'
+          ? ''
+          : data?.masothue?.toString().trim();
       let nghdchr = data.nghdchr;
       if (typeof nghdchr === 'number' && nghdchr > 0) {
         const excelDate = new Date((nghdchr - 25569) * 86400 * 1000);
@@ -1395,16 +1411,24 @@ export class InvoiceService {
     invoice: Invoice,
     token: string,
     useCache: boolean = false,
-    fullData: boolean = false
+    fullData: boolean = false,
   ): Promise<string | object> {
     const keyDetail = `${invoice.khmshdon}${invoice.khhdon}${invoice.shdon}`;
     try {
       const requestUrl = `${this.baseUrlInvoice}/query/invoices/detail?nbmst=${invoice.nbmst}&khhdon=${invoice.khhdon}&shdon=${invoice.shdon}&khmshdon=${invoice.khmshdon}`;
-      const cachedDetail = await this.redisService.hget(
-        `detail_${invoice.nbmst}`,
-        keyDetail,
-      );
-      if (cachedDetail || cachedDetail == '') {
+      let cachedDetail: string | null;
+      if (fullData) {
+        cachedDetail = await this.redisService.hget(
+          `full_detail_${invoice.nbmst}`,
+          keyDetail,
+        );
+      } else {
+        cachedDetail = await this.redisService.hget(
+          `detail_${invoice.nbmst}`,
+          keyDetail,
+        );
+      }
+      if (cachedDetail && cachedDetail != '') {
         return JSON.parse(cachedDetail);
       }
       if (useCache) {
@@ -1419,9 +1443,10 @@ export class InvoiceService {
       });
       if (fullData) {
         await this.redisService.hset(
-          `detail_${invoice.nbmst}`,
+          `full_detail_${invoice.nbmst}`,
           keyDetail,
-          JSON.stringify(res?.data)
+          JSON.stringify(res?.data),
+          30 * 24 * 60 * 60,
         );
 
         return res?.data;
