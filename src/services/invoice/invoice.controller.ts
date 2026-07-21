@@ -48,7 +48,13 @@ export class InvoiceController {
   @HttpCode(200)
   getDetailInvoice(
     @Query()
-    query: { nbmst: string; khhdon: string; shdon?: string; khmshdon?: string },
+    query: {
+      nbmst: string;
+      khhdon: string;
+      shdon?: string;
+      khmshdon?: string;
+      isSco?: string;
+    },
     @Req() req: Request,
   ): object {
     return this.InvoiceService.getDetailInvoice(req, query);

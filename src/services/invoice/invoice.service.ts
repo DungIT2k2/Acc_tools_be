@@ -134,9 +134,15 @@ export class InvoiceService {
 
   async getDetailInvoice(
     req: any,
-    query: { nbmst: string; khhdon: string; shdon?: string; khmshdon?: string },
+    query: {
+      nbmst: string;
+      khhdon: string;
+      shdon?: string;
+      khmshdon?: string;
+      isSco?: string;
+    },
   ): Promise<object> {
-    const { nbmst, khhdon, shdon, khmshdon } = query;
+    const { nbmst, khhdon, shdon, khmshdon, isSco = 'false' } = query;
     const usernameInvoice = req['user']['usernameInvoice'];
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `detail_${usernameInvoice}_${nbmst}_${khhdon}`;
@@ -149,6 +155,7 @@ export class InvoiceService {
       tokenInvoice,
       false,
       true,
+      isSco == 'true',
     ) as object;
   }
 
@@ -1412,10 +1419,12 @@ export class InvoiceService {
     token: string,
     useCache: boolean = false,
     fullData: boolean = false,
+    isSco: boolean = false,
   ): Promise<string | object> {
     const keyDetail = `${invoice.khmshdon}${invoice.khhdon}${invoice.shdon}`;
     try {
       const requestUrl = `${this.baseUrlInvoice}/query/invoices/detail?nbmst=${invoice.nbmst}&khhdon=${invoice.khhdon}&shdon=${invoice.shdon}&khmshdon=${invoice.khmshdon}`;
+      const requestUrlSco = `${this.baseUrlInvoice}/sco-query/invoices/detail?nbmst=${invoice.nbmst}&khhdon=${invoice.khhdon}&shdon=${invoice.shdon}&khmshdon=${invoice.khmshdon}`;
       let cachedDetail: string | null;
       if (fullData) {
         cachedDetail = await this.redisService.hget(
@@ -1435,7 +1444,7 @@ export class InvoiceService {
         return '';
       }
 
-      const res = await axios.get(requestUrl, {
+      const res = await axios.get(isSco ? requestUrlSco : requestUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -1446,7 +1455,7 @@ export class InvoiceService {
           `full_detail_${invoice.nbmst}`,
           keyDetail,
           JSON.stringify(res?.data),
-          30 * 24 * 60 * 60,
+          30 * 2 * 60 * 60,
         );
 
         return res?.data;
@@ -1466,6 +1475,15 @@ export class InvoiceService {
         `Error fetching invoice detail: ${error.response?.data?.message || error.message}`,
       );
       if (error.response?.data?.message === 'Không có quyền xem hóa đơn này') {
+        if (fullData) {
+          await this.redisService.hset(
+            `full_detail_${invoice.nbmst}`,
+            keyDetail,
+            JSON.stringify({ error: 'Không có quyền xem hóa đơn này' }),
+            30 * 2 * 60 * 60,
+          );
+          return 'Không có quyền xem hóa đơn này';
+        }
         await this.redisService.hset(
           `detail_${invoice.nbmst}`,
           keyDetail,
