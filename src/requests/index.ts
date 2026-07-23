@@ -87,6 +87,28 @@ export interface LogginInvoiceReq {
   cvalue?: string;
 }
 
+export interface CreateInvoiceTaskQueueReq {
+  type: string;
+  payload?: Record<string, any>;
+}
+
+export interface InvoiceTaskQueueItem {
+  id: string;
+  usernameInvoice: string;
+  type: string;
+  label: string;
+  payload: Record<string, any>;
+  status: 'pending' | 'cancelled' | 'done' | 'failed' | 'running';
+  createdAt: number;
+}
+
+export interface InvoiceTaskQueueSummary {
+  id: string;
+  label: string;
+  status: InvoiceTaskQueueItem['status'];
+  createdAt: number;
+}
+
 export interface Invoice {
   stt: string;
   nbmst: string;

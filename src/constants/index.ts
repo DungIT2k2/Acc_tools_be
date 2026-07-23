@@ -1,3 +1,9 @@
+export const INVOICE_TASK_QUEUE_TYPES: Record<string, string> = {
+  '/invoice/getPurchaseInvoice': 'Lấy hoá đơn mua',
+  '/invoice/getSoldInvoice': 'Lấy hoá đơn bán',
+  '/invoice/getDetailInvoice': 'Lấy chi tiết hoá đơn',
+};
+
 export const TEMPLATE_EXPORT_PURCHASE_INVOICE = {
   stt: 'STT',
   khmshdon: 'Ký hiệu mẫu số',

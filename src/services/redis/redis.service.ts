@@ -38,6 +38,42 @@ export class RedisService {
         return this.redis.del(key);
     }
 
+    async rpush(key: string, value: string): Promise<number> {
+        return this.redis.rpush(key, value);
+    }
+
+    async lrem(key: string, value: string, count = 0): Promise<number> {
+        return this.redis.lrem(key, count, value);
+    }
+
+    async lrange(key: string, start: number, stop: number): Promise<string[]> {
+        return this.redis.lrange(key, start, stop);
+    }
+
+    async lpop(key: string): Promise<string | null> {
+        return this.redis.lpop(key);
+    }
+
+    async keys(pattern: string): Promise<string[]> {
+        let cursor = '0';
+        const keys: string[] = [];
+
+        do {
+            const [nextCursor, result] = await this.redis.scan(
+                cursor,
+                'MATCH',
+                pattern,
+                'COUNT',
+                100,
+            );
+
+            cursor = nextCursor;
+            keys.push(...result);
+        } while (cursor !== '0');
+
+        return keys;
+    }
+
     async getlistLoggedInvoice(
         pattern: string,
     ): Promise<{ key: string; value: string | null }[]> {

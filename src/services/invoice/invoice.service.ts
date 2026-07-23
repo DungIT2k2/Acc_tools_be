@@ -1,9 +1,19 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import {
+  CreateInvoiceTaskQueueReq,
   Invoice,
   InvoiceData,
   InvoicePurchaseData,
   InvoiceSoldData,
+  InvoiceTaskQueueItem,
+  InvoiceTaskQueueSummary,
   UserInvoiceData,
 } from 'src/requests';
 import { ExcelService } from '../excel/excel.service';
@@ -12,21 +22,247 @@ import axios from 'axios';
 import moment from 'moment-timezone';
 import { RedisService } from '../redis/redis.service';
 import { parseDate } from 'src/utils';
+import { INVOICE_TASK_QUEUE_TYPES } from 'src/constants';
+
+const INVOICE_TASK_QUEUE_ORDER_PREFIX = 'task_queue_order_';
+const INVOICE_TASK_QUEUE_KEY_PREFIX = 'task_queue_task_';
+const invoiceTaskQueueOrderKey = (usernameInvoice: string) =>
+  `${INVOICE_TASK_QUEUE_ORDER_PREFIX}${usernameInvoice}`;
+const invoiceTaskQueueKey = (usernameInvoice: string, id: string) =>
+  `${INVOICE_TASK_QUEUE_KEY_PREFIX}${usernameInvoice}_${id}`;
 
 @Injectable()
-export class InvoiceService {
+export class InvoiceService implements OnModuleInit {
   private readonly accInvoiceMap = new Map<string, object>();
   private readonly invoiceMemCache = new Map<string, object>();
   private readonly baseUrlInvoice = process.env.BASE_URL_INVOICE;
+
+  private isProcessingQueue = false;
+  private pendingQueueRerun = false;
+
+  // Key phải khớp với key khai báo trong INVOICE_TASK_QUEUE_TYPES
+  private readonly taskQueueHandlers: Record<
+    string,
+    (req: any, payload: any, isAuto: boolean) => Promise<any>
+  > = {
+    '/invoice/getPurchaseInvoice': (req, payload, isAuto) =>
+      this.getPurchaseInvoice(req, payload, isAuto),
+    '/invoice/getSoldInvoice': (req, payload, isAuto) =>
+      this.getSoldInvoice(req, payload, isAuto),
+    '/invoice/getDetailInvoice': (req, payload, isAuto) =>
+      this.getDetailInvoice(req, payload, isAuto),
+  };
+
   constructor(
     private readonly excelService: ExcelService,
     private readonly authService: AuthService,
     private readonly redisService: RedisService,
   ) {}
 
+  onModuleInit() {
+    // Xử lý nốt các task còn tồn đọng từ trước khi server khởi động lại
+    this.triggerQueueProcessing();
+  }
+
+  private triggerQueueProcessing(): void {
+    if (this.isProcessingQueue) {
+      this.pendingQueueRerun = true;
+      return;
+    }
+
+    this.isProcessingQueue = true;
+    void this.runQueueProcessingLoop();
+  }
+
+  private async runQueueProcessingLoop(): Promise<void> {
+    try {
+      do {
+        this.pendingQueueRerun = false;
+        await this.processTaskQueues();
+      } while (this.pendingQueueRerun);
+    } catch (error) {
+      Logger.error(`Error processing invoice task queues: ${error.message}`);
+    } finally {
+      this.isProcessingQueue = false;
+    }
+  }
+
   async listLogged(): Promise<object[]> {
     const listKey = await this.redisService.getlistLoggedInvoice('invoice_*');
     return listKey;
+  }
+
+  async createTaskQueue(
+    req: any,
+    body: CreateInvoiceTaskQueueReq,
+  ): Promise<object> {
+    const usernameInvoice = req['user']['usernameInvoice'];
+    if (!usernameInvoice)
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+
+    const { type, payload } = body;
+    const label = INVOICE_TASK_QUEUE_TYPES[type];
+    if (!type || !label) {
+      throw new HttpException('Loại task không hợp lệ', HttpStatus.BAD_REQUEST);
+    }
+
+    const task: InvoiceTaskQueueItem = {
+      id: randomUUID(),
+      usernameInvoice,
+      type,
+      label: this.buildTaskQueueLabel(label, payload),
+      payload: payload || {},
+      status: 'pending',
+      createdAt: Date.now(),
+    };
+
+    await this.redisService.set(
+      invoiceTaskQueueKey(usernameInvoice, task.id),
+      JSON.stringify(task),
+    );
+    await this.redisService.rpush(
+      invoiceTaskQueueOrderKey(usernameInvoice),
+      task.id,
+    );
+    this.triggerQueueProcessing();
+
+    Logger.log(
+      `Invoice task ${task.id} (${type}) added to queue of ${usernameInvoice}`,
+    );
+    return {
+      id: task.id,
+      label: task.label,
+      status: task.status,
+      createdAt: task.createdAt,
+    };
+  }
+
+  async cancelTaskQueue(req: any, id: string): Promise<InvoiceTaskQueueItem> {
+    const usernameInvoice = req['user']['usernameInvoice'];
+    if (!usernameInvoice)
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+
+    if (!id) {
+      throw new HttpException('Id task không hợp lệ', HttpStatus.BAD_REQUEST);
+    }
+
+    const data = await this.redisService.get(
+      invoiceTaskQueueKey(usernameInvoice, id),
+    );
+    if (!data) {
+      throw new HttpException('Không tìm thấy task', HttpStatus.NOT_FOUND);
+    }
+
+    const task: InvoiceTaskQueueItem = JSON.parse(data);
+    if (task.status === 'cancelled') {
+      return task;
+    }
+
+    task.status = 'cancelled';
+    await this.redisService.set(
+      invoiceTaskQueueKey(usernameInvoice, id),
+      JSON.stringify(task),
+    );
+    await this.redisService.lrem(invoiceTaskQueueOrderKey(usernameInvoice), id);
+
+    Logger.log(`Invoice task ${id} of ${usernameInvoice} cancelled`);
+    return task;
+  }
+
+  async listTaskQueue(): Promise<Record<string, InvoiceTaskQueueSummary[]>> {
+    const taskKeys = await this.redisService.keys(
+      `${INVOICE_TASK_QUEUE_KEY_PREFIX}*`,
+    );
+    if (taskKeys.length === 0) return {};
+
+    const rawTasks = await Promise.all(
+      taskKeys.map((key) => this.redisService.get(key)),
+    );
+
+    const grouped: Record<string, InvoiceTaskQueueSummary[]> = {};
+    rawTasks
+      .filter((raw): raw is string => !!raw)
+      .forEach((raw) => {
+        const task: InvoiceTaskQueueItem = JSON.parse(raw);
+        if (!grouped[task.usernameInvoice]) {
+          grouped[task.usernameInvoice] = [];
+        }
+        grouped[task.usernameInvoice].push({
+          id: task.id,
+          label: task.label,
+          status: task.status,
+          createdAt: task.createdAt,
+        });
+      });
+
+    return grouped;
+  }
+
+  async processTaskQueues(): Promise<void> {
+    const orderKeys = await this.redisService.keys(
+      `${INVOICE_TASK_QUEUE_ORDER_PREFIX}*`,
+    );
+    if (orderKeys.length === 0) return;
+
+    await Promise.all(
+      orderKeys.map((orderKey) => {
+        const usernameInvoice = orderKey.slice(
+          INVOICE_TASK_QUEUE_ORDER_PREFIX.length,
+        );
+        return this.processUserTaskQueue(usernameInvoice, orderKey);
+      }),
+    );
+  }
+
+  private async processUserTaskQueue(
+    usernameInvoice: string,
+    orderKey: string,
+  ): Promise<void> {
+    for (;;) {
+      const id = await this.redisService.lpop(orderKey);
+      if (!id) break;
+
+      const taskKey = invoiceTaskQueueKey(usernameInvoice, id);
+      const data = await this.redisService.get(taskKey);
+      if (!data) continue;
+
+      const task: InvoiceTaskQueueItem = JSON.parse(data);
+      if (task.status === 'cancelled') continue;
+
+      const handler = this.taskQueueHandlers[task.type];
+      const req = { user: { usernameInvoice } };
+
+      if (!handler) {
+        task.status = 'failed';
+        Logger.warn(
+          `Invoice task ${task.id}: no handler for type ${task.type}`,
+        );
+      } else {
+        try {
+          task.status = 'running';
+          await this.redisService.set(taskKey, JSON.stringify(task));
+          const checkError = await handler(req, task.payload, true);
+          if (checkError) {
+            Logger.warn(
+              `Invoice task ${task.id} (${task.type}) of ${usernameInvoice} partially, re-queued`,
+            );
+            await this.redisService.rpush(orderKey, id);
+          } else {
+            task.status = 'done';
+            Logger.log(
+              `Invoice task ${task.id} (${task.type}) of ${usernameInvoice} done`,
+            );
+          }
+        } catch (error) {
+          task.status = 'failed';
+          Logger.error(
+            `Invoice task ${task.id} (${task.type}) of ${usernameInvoice} failed: ${error.message}`,
+          );
+        }
+      }
+
+      await this.redisService.set(taskKey, JSON.stringify(task));
+    }
   }
 
   async handleLoginInvoice(body: any, req: any): Promise<object> {
@@ -141,7 +377,8 @@ export class InvoiceService {
       khmshdon?: string;
       isSco?: string;
     },
-  ): Promise<object> {
+    isAuto = false,
+  ): Promise<any> {
     const { nbmst, khhdon, shdon, khmshdon, isSco = 'false' } = query;
     const usernameInvoice = req['user']['usernameInvoice'];
     const key = `invoice_${usernameInvoice}`;
@@ -150,19 +387,27 @@ export class InvoiceService {
     if (!token)
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
     const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
-    return this.getInvoiceDetail(
+    const dataRes = (await this.getInvoiceDetail(
       query as any,
       tokenInvoice,
       false,
       true,
       isSco == 'true',
-    ) as object;
+    )) as object;
+    if (isAuto) {
+      if (typeof dataRes === 'string' && dataRes == 'error') {
+        return true;
+      }
+      return false;
+    }
+    return dataRes;
   }
 
   async getPurchaseInvoice(
     req: any,
     query: { from: string; to: string; renew?: string; renewDetail?: string },
-  ): Promise<object> {
+    isAuto: boolean = false,
+  ): Promise<any> {
     const { from, to, renew = 'false', renewDetail = 'false' } = query;
     const renewCache = renew === 'true';
     const renewDetailCache = renewDetail === 'true';
@@ -181,6 +426,7 @@ export class InvoiceService {
       invoiceNoCodeData: [] as any[],
       invoiceCashRegisterData: [] as any[],
     };
+    let checkError: boolean = false;
     for (let index = 0; index < froms.length; index++) {
       const fromDate = froms[index];
       const toDate = tos[index];
@@ -196,7 +442,7 @@ export class InvoiceService {
       ) {
         throw new HttpException('Invalid date format', HttpStatus.BAD_REQUEST);
       }
-      const data = await this.getOneMonthPurchaseInvoice(
+      const { data, isError } = await this.getOneMonthPurchaseInvoice(
         usernameInvoice as string,
         fromDate,
         toDate,
@@ -204,6 +450,9 @@ export class InvoiceService {
         renewCache,
         renewDetailCache,
       );
+      if (isError) {
+        checkError = true;
+      }
       if (
         data['invoiceIssuedData'] &&
         data['invoiceNoCodeData'] &&
@@ -234,6 +483,7 @@ export class InvoiceService {
         dataMerged.invoiceCashRegisterData as InvoiceData[],
       ),
     };
+    if (isAuto) return checkError;
     return dataRes;
   }
 
@@ -244,7 +494,8 @@ export class InvoiceService {
     lastWait = false,
     renewCache = false,
     renewDetailCache = false,
-  ): Promise<object> {
+  ): Promise<{ data: object; isError: boolean }> {
+    let isError = false;
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `purchase_${usernameInvoice}_${from}_${to}`;
     const token = await this.redisService.get(key);
@@ -256,7 +507,7 @@ export class InvoiceService {
       const dataCache = await this.redisService.get(cacheKey);
       if (dataCache) {
         if (!renewDetailCache) {
-          return JSON.parse(dataCache) as object;
+          return { data: JSON.parse(dataCache) as object, isError };
         }
         const dataCacheParsed = JSON.parse(dataCache);
         let { invoiceIssuedData, invoiceNoCodeData, invoiceCashRegisterData } =
@@ -290,7 +541,7 @@ export class InvoiceService {
           JSON.stringify(dataRes),
           24 * 60 * 60 * 2,
         );
-        return dataRes;
+        return { data: dataRes, isError };
       }
     } else {
       await this.redisService.del(cacheKey);
@@ -325,11 +576,13 @@ export class InvoiceService {
         JSON.stringify(dataRes),
         24 * 60 * 60 * 2,
       );
+    } else {
+      isError = true;
     }
     if (!lastWait) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-    return dataRes;
+    return { data: dataRes, isError };
   }
 
   async callGetInvoice<T>(
@@ -872,7 +1125,8 @@ export class InvoiceService {
   async getSoldInvoice(
     req: any,
     query: { from: string; to: string; renew?: string; renewDetail?: string },
-  ) {
+    isAuto = false,
+  ): Promise<any> {
     const { from, to, renew = 'false', renewDetail = 'false' } = query;
     const renewCache = renew === 'true';
     const renewDetailCache = renewDetail === 'true';
@@ -890,6 +1144,7 @@ export class InvoiceService {
       invoiceElectronicData: [] as any[],
       invoiceCashRegisterData: [] as any[],
     };
+    let checkError: boolean = false;
     for (let index = 0; index < froms.length; index++) {
       const fromDate = froms[index];
       const toDate = tos[index];
@@ -905,7 +1160,7 @@ export class InvoiceService {
       ) {
         throw new HttpException('Invalid date format', HttpStatus.BAD_REQUEST);
       }
-      const data = await this.getOneMonthSoldInvoice(
+      const { data, isError } = await this.getOneMonthSoldInvoice(
         usernameInvoice,
         fromDate,
         toDate,
@@ -923,6 +1178,9 @@ export class InvoiceService {
           ...data['invoiceCashRegisterData'],
         ];
       }
+      if (isError) {
+        checkError = true;
+      }
     }
     const dataRes = {
       invoiceElectronicData: this.mapSoldInvoiceData(
@@ -932,6 +1190,7 @@ export class InvoiceService {
         dataMerged.invoiceCashRegisterData as InvoiceData[],
       ),
     };
+    if (isAuto) return checkError;
     return dataRes;
   }
 
@@ -942,7 +1201,8 @@ export class InvoiceService {
     lastWait = false,
     renewCache = false,
     renewDetailCache = false,
-  ): Promise<object> {
+  ): Promise<any> {
+    let isError = false;
     const key = `invoice_${usernameInvoice}`;
     const cacheKey = `sold_${usernameInvoice}_${from}_${to}`;
     const token = await this.redisService.get(key);
@@ -955,7 +1215,7 @@ export class InvoiceService {
       const dataCache = await this.redisService.get(cacheKey);
       if (dataCache) {
         if (!renewDetailCache) {
-          return JSON.parse(dataCache) as object;
+          return { data: JSON.parse(dataCache) as object, isError };
         }
 
         const dataCacheParsed = JSON.parse(dataCache);
@@ -983,7 +1243,7 @@ export class InvoiceService {
           JSON.stringify(dataRes),
           24 * 60 * 60 * 2,
         );
-        return dataRes;
+        return { data: dataRes, isError };
       }
     } else {
       await this.redisService.del(cacheKey);
@@ -1012,11 +1272,13 @@ export class InvoiceService {
         JSON.stringify(dataRes),
         24 * 60 * 60 * 2,
       );
+    } else {
+      isError = true;
     }
     if (!lastWait) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
-    return dataRes;
+    return { data: dataRes, isError };
   }
 
   async compareSoldInvoice(
@@ -1494,5 +1756,27 @@ export class InvoiceService {
       }
       return 'error';
     }
+  }
+
+  private buildTaskQueueLabel(
+    label: string,
+    payload?: Record<string, any>,
+  ): string {
+    const from = payload?.from;
+    const to = payload?.to;
+    const shdon = payload?.shdon;
+    if (shdon) {
+      return `${label} số ${shdon}`;
+    }
+    if (!from || !to) return label;
+
+    const froms = String(from).trim().split(',');
+    const tos = String(to).trim().split(',');
+    if (froms.length === 0 || tos.length === 0) return label;
+
+    const fromFirst = froms[0];
+    const toLast = tos[tos.length - 1];
+
+    return `${label} từ ${toLast} đến ${fromFirst}`;
   }
 }

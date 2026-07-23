@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Query,
   Req,
@@ -27,6 +28,27 @@ export class InvoiceController {
   @HttpCode(200)
   listLogged(): object {
     return this.InvoiceService.listLogged();
+  }
+
+  @Post('createTaskQueue')
+  @HttpCode(200)
+  createTaskQueue(
+    @Body() body: requests.CreateInvoiceTaskQueueReq,
+    @Req() req: Request,
+  ): object {
+    return this.InvoiceService.createTaskQueue(req, body);
+  }
+
+  @Post('cancelTaskQueue/:id')
+  @HttpCode(200)
+  cancelTaskQueue(@Param('id') id: string, @Req() req: Request): object {
+    return this.InvoiceService.cancelTaskQueue(req, id);
+  }
+
+  @Get('listTaskQueue')
+  @HttpCode(200)
+  listTaskQueue(): object {
+    return this.InvoiceService.listTaskQueue();
   }
 
   @Post('loginInvoice')
