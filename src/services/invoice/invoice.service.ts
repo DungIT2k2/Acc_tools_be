@@ -567,6 +567,7 @@ export class InvoiceService implements OnModuleInit {
           invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
             invoiceCashRegisterData as Invoice[],
             tokenInvoice,
+            true
           );
         }
         const dataRes = {
@@ -1691,10 +1692,11 @@ export class InvoiceService implements OnModuleInit {
   async getAllInvoiceDetailInMap<T>(
     invoices: Invoice[],
     token: string,
+    isSco: boolean = false
   ): Promise<T[]> {
     const dataRes: T[] = [];
     for (const invoice of invoices) {
-      const diengiai = await this.getInvoiceDetail(invoice, token);
+      const diengiai = await this.getInvoiceDetail(invoice, token, false, false, isSco);
       dataRes.push({
         ...invoice,
         diengiai,
@@ -1727,13 +1729,16 @@ export class InvoiceService implements OnModuleInit {
         );
       }
       if (cachedDetail && cachedDetail != '') {
-        return JSON.parse(cachedDetail);
+        if (fullData) {
+          return JSON.parse(cachedDetail);
+        }
+        return cachedDetail
       }
       if (useCache) {
         return '';
       }
-
-      const res = await axios.get(isSco ? requestUrlSco : requestUrl, {
+      const url = isSco ? requestUrlSco : requestUrl;
+      const res = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -1756,7 +1761,7 @@ export class InvoiceService implements OnModuleInit {
         diengiai,
         30 * 24 * 60 * 60,
       );
-      Logger.log(`Fetching detail from URL: ${requestUrl} => Done`);
+      Logger.log(`Fetching detail from URL: ${url} => Done`);
       await new Promise((resolve) => setTimeout(resolve, 700));
       return diengiai;
     } catch (error) {
