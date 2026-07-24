@@ -12,6 +12,15 @@ export class LoggingMiddleware implements NestMiddleware {
 
     constructor(private readonly jwtService: JwtService) { };
 
+    private getClientIp(req: Request): string {
+        const forwardedFor = req.headers['x-forwarded-for'];
+        this.logger.log('debug headers', req.headers);
+        if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+            return forwardedFor.split(',')[0].trim();
+        }
+        return req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    }
+
     private getUsernameFromToken(req: Request): string | undefined {
         const authHeader = req.headers['authorization'];
         if (!authHeader) return undefined;
@@ -32,6 +41,7 @@ export class LoggingMiddleware implements NestMiddleware {
         const txId = randomUUID();
         const start = Date.now();
         const username = this.getUsernameFromToken(req);
+        const ip = this.getClientIp(req);
 
         req['txId'] = txId;
         res.setHeader('X-Transaction-Id', txId);
@@ -39,14 +49,14 @@ export class LoggingMiddleware implements NestMiddleware {
         requestContext.run({ txId }, () => {
 
             if (body?.password) {
-                this.logger.log(`--> request - ${username} | ${method} ${originalUrl} | payload: ${JSON.stringify({ ...body, password: '******' })}`);
+                this.logger.log(`--> request - ${username} - ${ip} | ${method} ${originalUrl} | payload: ${JSON.stringify({ ...body, password: '******' })}`);
             } else {
-                this.logger.log(`--> request - ${username} | ${method} ${originalUrl} | payload: ${JSON.stringify(body)}`);
+                this.logger.log(`--> request - ${username} - ${ip} | ${method} ${originalUrl} | payload: ${JSON.stringify(body)}`);
             }
 
             res.on('finish', () => {
                 const duration = Date.now() - start;
-                this.logger.log(`<-- response - ${username} | ${method} ${originalUrl} | status: ${res.statusCode} | ${duration}ms`);
+                this.logger.log(`<-- response - ${username} - ${ip} | ${method} ${originalUrl} | status: ${res.statusCode} | ${duration}ms`);
             });
 
             next();
