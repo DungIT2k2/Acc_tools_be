@@ -23,6 +23,7 @@ import moment from 'moment-timezone';
 import { RedisService } from '../redis/redis.service';
 import { parseDate } from 'src/utils';
 import { INVOICE_TASK_QUEUE_TYPES } from 'src/constants';
+import { INVOICE_TTHAI_MAP, INVOICE_TTXLY_MAP } from '../../constants';
 
 const INVOICE_TASK_QUEUE_ORDER_PREFIX = 'task_queue_order_';
 const INVOICE_TASK_QUEUE_KEY_PREFIX = 'task_queue_task_';
@@ -648,20 +649,8 @@ export class InvoiceService implements OnModuleInit {
               ttcktmai: invoice.ttcktmai,
               tgtphi: invoice?.tgtphi,
               tgtttbso: invoice.tgtttbso,
-              tthai:
-                invoice.tthai == 1
-                  ? 'Hóa đơn mới'
-                  : invoice.tthai == 2
-                    ? 'Hóa đơn thay thế'
-                    : invoice.tthai == 3
-                      ? 'Hóa đơn điều chỉnh'
-                      : invoice.tthai == 4
-                        ? 'Hóa đơn đã bị thay thế'
-                        : invoice.tthai == 5
-                          ? 'Hóa đơn đã bị điều chỉnh'
-                          : invoice.tthai == 6
-                            ? 'Hóa đơn đã bị hủy'
-                            : invoice.tthai,
+              tthai: INVOICE_TTHAI_MAP[invoice.tthai] ?? invoice.tthai,
+              ttxly: INVOICE_TTXLY_MAP[invoice.ttxly] ?? invoice.ttxly,
               nmdchi: invoice.nmdchi,
               khmshdgoc: invoice.khmshdgoc,
               khhdgoc: invoice.khhdgoc,
