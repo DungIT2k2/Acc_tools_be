@@ -1658,7 +1658,7 @@ export class InvoiceService implements OnModuleInit {
 
   private mapPurchaseInvoiceData(data: InvoiceData[]): InvoicePurchaseData[] {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return data.map(({ nmmst, nmten, ...rest }) => rest);
+    return data.map(({ nmmst, ...rest }) => rest);
   }
 
   async getAllInvoiceDetailInMap<T>(
