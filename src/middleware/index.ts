@@ -14,7 +14,6 @@ export class LoggingMiddleware implements NestMiddleware {
 
     private getClientIp(req: Request): string {
         const forwardedFor = req.headers['x-forwarded-for'];
-        this.logger.log('debug headers', req.headers);
         if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
             return forwardedFor.split(',')[0].trim();
         }
