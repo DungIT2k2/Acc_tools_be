@@ -170,6 +170,31 @@ export class InvoiceService implements OnModuleInit {
     return task;
   }
 
+  async clearTaskHistory(req: any): Promise<void> {
+    const usernameInvoice = req['user']['usernameInvoice'];
+    if (!usernameInvoice)
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+
+    const taskKeys = await this.redisService.keys(
+      invoiceTaskQueueKey(usernameInvoice, '*'),
+    );
+    if (taskKeys.length === 0) return;
+
+    await Promise.all(
+      taskKeys.map(async (key) => {
+        const data = await this.redisService.get(key);
+
+        if (!data) return;
+
+        const task = JSON.parse(data);
+
+        if (['done', 'failed', 'cancelled'].includes(task.status)) {
+          await this.redisService.del(key);
+        }
+      }),
+    );
+  }
+
   async listTaskQueue(): Promise<Record<string, InvoiceTaskQueueSummary[]>> {
     const taskKeys = await this.redisService.keys(
       `${INVOICE_TASK_QUEUE_KEY_PREFIX}*`,
@@ -259,10 +284,16 @@ export class InvoiceService implements OnModuleInit {
           Logger.error(
             `Invoice task ${task.id} (${task.type}) of ${usernameInvoice} failed: ${error.message}`,
           );
+          await this.redisService.set(
+            taskKey,
+            JSON.stringify(task),
+            24 * 60 * 60,
+          );
         }
       }
-
-      await this.redisService.set(taskKey, JSON.stringify(task));
+      const ttl =
+        task.status === 'done' || task.status === 'failed' ? 24 * 60 * 60 : 0;
+      await this.redisService.set(taskKey, JSON.stringify(task), ttl);
     }
   }
 

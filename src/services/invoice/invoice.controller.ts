@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -43,6 +44,12 @@ export class InvoiceController {
   @HttpCode(200)
   cancelTaskQueue(@Param('id') id: string, @Req() req: Request): object {
     return this.InvoiceService.cancelTaskQueue(req, id);
+  }
+
+  @Delete('clearTaskHistory')
+  @HttpCode(200)
+  clearTaskHistory(@Req() req: Request): object {
+    return this.InvoiceService.clearTaskHistory(req);
   }
 
   @Get('listTaskQueue')
