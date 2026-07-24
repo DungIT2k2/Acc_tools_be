@@ -253,6 +253,13 @@ export class InvoiceService implements OnModuleInit {
       if (!data) continue;
 
       const task: InvoiceTaskQueueItem = JSON.parse(data);
+      const checkToken = await this.redisService.get(`invoice_${usernameInvoice}`);
+      if (!checkToken) {
+        Logger.warn(`Invoice task ${task.id}: invalid token for user ${usernameInvoice}`);
+        task.status = 'failed';
+        await this.redisService.set(taskKey, JSON.stringify(task), 24 * 60 * 60);
+        continue;
+      }
       if (task.status === 'cancelled') continue;
 
       const handler = this.taskQueueHandlers[task.type];
