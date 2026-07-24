@@ -10,25 +10,43 @@ import { requestContext } from '../logger/request-context';
 export class LoggingMiddleware implements NestMiddleware {
     private readonly logger = new AppLogger('HTTP');
 
+    constructor(private readonly jwtService: JwtService) { };
+
+    private getUsernameFromToken(req: Request): string | undefined {
+        const authHeader = req.headers['authorization'];
+        if (!authHeader) return undefined;
+
+        const token = authHeader.split(' ')[1];
+        if (!token) return undefined;
+
+        try {
+            const decoded = this.jwtService.decode(token) as Record<string, any>;
+            return decoded?.username;
+        } catch {
+            return undefined;
+        }
+    }
+
     use(req: Request, res: Response, next: NextFunction) {
         const { method, originalUrl, body } = req;
         const txId = randomUUID();
         const start = Date.now();
+        const username = this.getUsernameFromToken(req);
 
         req['txId'] = txId;
         res.setHeader('X-Transaction-Id', txId);
 
         requestContext.run({ txId }, () => {
-            
+
             if (body?.password) {
-                this.logger.log(`--> ${method} ${originalUrl} | payload: ${JSON.stringify({ ...body, password: '******' })}`);
+                this.logger.log(`--> request - ${username} | ${method} ${originalUrl} | payload: ${JSON.stringify({ ...body, password: '******' })}`);
             } else {
-                this.logger.log(`--> ${method} ${originalUrl} | payload: ${JSON.stringify(body)}`);
+                this.logger.log(`--> request - ${username} | ${method} ${originalUrl} | payload: ${JSON.stringify(body)}`);
             }
 
             res.on('finish', () => {
                 const duration = Date.now() - start;
-                this.logger.log(`<-- ${method} ${originalUrl} | status: ${res.statusCode} | ${duration}ms`);
+                this.logger.log(`<-- response - ${username} | ${method} ${originalUrl} | status: ${res.statusCode} | ${duration}ms`);
             });
 
             next();
