@@ -681,7 +681,7 @@ export class InvoiceService implements OnModuleInit {
                 .format('DD/MM/YYYY'),
               nbmst: invoice.nbmst,
               nbten: invoice.nbten,
-              nmten: invoice.nmtnmua || invoice.nmten,
+              nmten: invoice.nmten,
               nmmst: invoice.nmmst,
               tgtcthue: invoice.tgtcthue,
               tgtthue: invoice.tgtthue,
