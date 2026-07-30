@@ -1806,9 +1806,9 @@ export class InvoiceService implements OnModuleInit {
     const tos = String(to).trim().split(',');
     if (froms.length === 0 || tos.length === 0) return label;
 
-    const fromFirst = froms[froms.length - 1];
-    const toLast = tos[0];
+    const fromLast = froms[froms.length - 1];
+    const toFirst = tos[0];
 
-    return `${label} từ ${toLast} đến ${fromFirst}`;
+    return `${label} từ ${fromLast} đến ${toFirst}`;
   }
 }
