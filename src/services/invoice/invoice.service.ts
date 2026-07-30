@@ -253,11 +253,19 @@ export class InvoiceService implements OnModuleInit {
       if (!data) continue;
 
       const task: InvoiceTaskQueueItem = JSON.parse(data);
-      const checkToken = await this.redisService.get(`invoice_${usernameInvoice}`);
+      const checkToken = await this.redisService.get(
+        `invoice_${usernameInvoice}`,
+      );
       if (!checkToken) {
-        Logger.warn(`Invoice task ${task.id}: invalid token for user ${usernameInvoice}`);
+        Logger.warn(
+          `Invoice task ${task.id}: invalid token for user ${usernameInvoice}`,
+        );
         task.status = 'failed';
-        await this.redisService.set(taskKey, JSON.stringify(task), 24 * 60 * 60);
+        await this.redisService.set(
+          taskKey,
+          JSON.stringify(task),
+          24 * 60 * 60,
+        );
         continue;
       }
       if (task.status === 'cancelled') continue;
@@ -567,7 +575,7 @@ export class InvoiceService implements OnModuleInit {
           invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
             invoiceCashRegisterData as Invoice[],
             tokenInvoice,
-            true
+            true,
           );
         }
         const dataRes = {
@@ -587,18 +595,19 @@ export class InvoiceService implements OnModuleInit {
       await this.redisService.del(cacheKey);
     }
 
+    const cacheTempKey = `cache_${cacheKey}`;
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
     const invoiceIssuedDataRes: InvoiceData[] = await this.callGetInvoice<
       InvoiceData[]
-    >(tokenInvoice, urlInvoiceIssued);
+    >(tokenInvoice, urlInvoiceIssued, cacheTempKey);
     const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
     const invoiceNoCodeDataRes: InvoiceData[] = await this.callGetInvoice<
       InvoiceData[]
-    >(tokenInvoice, urlInvoiceNoCode);
+    >(tokenInvoice, urlInvoiceNoCode, cacheTempKey);
     const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
     const invoiceCashRegisterDataRes: InvoiceData[] = await this.callGetInvoice<
       InvoiceData[]
-    >(tokenInvoice, urlInvoiceCashRegister, true);
+    >(tokenInvoice, urlInvoiceCashRegister, cacheTempKey, true);
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -611,6 +620,11 @@ export class InvoiceService implements OnModuleInit {
       !invoiceNoCodeDataRes[0]?.['error'] &&
       !invoiceCashRegisterDataRes[0]?.['error']
     ) {
+      // Clear cache all API
+      await this.redisService.del(cacheTempKey);
+      Logger.log(
+        `Clear cache for user ${usernameInvoice} after fetching purchase invoices from ${from} to ${to}`,
+      );
       await this.redisService.set(
         cacheKey,
         JSON.stringify(dataRes),
@@ -628,12 +642,18 @@ export class InvoiceService implements OnModuleInit {
   async callGetInvoice<T>(
     token: string,
     url: string,
+    cacheKey: string,
     lastWait = false,
     retry = 0,
   ): Promise<T> {
     try {
       const allInvoices: Invoice[] = [];
       let nextState: string | undefined = undefined;
+
+      const dataCache = await this.redisService.hget(cacheKey, url);
+      if (dataCache) {
+        return JSON.parse(dataCache) as T;
+      }
 
       do {
         const requestUrl = nextState
@@ -698,6 +718,12 @@ export class InvoiceService implements OnModuleInit {
             };
           }),
         );
+        await this.redisService.hset(
+          cacheKey,
+          url,
+          JSON.stringify(result),
+          8 * 60 * 60,
+        );
 
         return result as T;
       }
@@ -709,7 +735,13 @@ export class InvoiceService implements OnModuleInit {
       );
       if (retry <= 2) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
-        return this.callGetInvoice<T>(token, url, lastWait, retry + 1);
+        return this.callGetInvoice<T>(
+          token,
+          url,
+          cacheKey,
+          lastWait,
+          retry + 1,
+        );
       }
       return [
         {
@@ -1277,14 +1309,15 @@ export class InvoiceService implements OnModuleInit {
       await this.redisService.del(cacheKey);
     }
 
+    const cacheTempKey = `cache_${cacheKey}`;
     const urlInvoiceElectronic = `${this.baseUrlInvoice}/query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
     const invoiceElectronicDataRes: InvoiceData[] = await this.callGetInvoice<
       InvoiceData[]
-    >(tokenInvoice, urlInvoiceElectronic);
+    >(tokenInvoice, urlInvoiceElectronic, cacheTempKey);
     const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
     const invoiceCashRegisterDataRes: InvoiceData[] = await this.callGetInvoice<
       InvoiceData[]
-    >(tokenInvoice, urlInvoiceCashRegister, true);
+    >(tokenInvoice, urlInvoiceCashRegister, cacheTempKey, true);
 
     const dataRes = {
       invoiceElectronicData: invoiceElectronicDataRes,
@@ -1295,6 +1328,11 @@ export class InvoiceService implements OnModuleInit {
       !invoiceElectronicDataRes[0]?.['error'] &&
       !invoiceCashRegisterDataRes[0]?.['error']
     ) {
+      // Clear cache all API
+      await this.redisService.del(cacheTempKey);
+      Logger.log(
+        `Clear cache for user ${usernameInvoice} after fetching sold invoices from ${from} to ${to}`,
+      );
       await this.redisService.set(
         cacheKey,
         JSON.stringify(dataRes),
@@ -1692,11 +1730,17 @@ export class InvoiceService implements OnModuleInit {
   async getAllInvoiceDetailInMap<T>(
     invoices: Invoice[],
     token: string,
-    isSco: boolean = false
+    isSco: boolean = false,
   ): Promise<T[]> {
     const dataRes: T[] = [];
     for (const invoice of invoices) {
-      const diengiai = await this.getInvoiceDetail(invoice, token, false, false, isSco);
+      const diengiai = await this.getInvoiceDetail(
+        invoice,
+        token,
+        false,
+        false,
+        isSco,
+      );
       dataRes.push({
         ...invoice,
         diengiai,
@@ -1732,7 +1776,7 @@ export class InvoiceService implements OnModuleInit {
         if (fullData) {
           return JSON.parse(cachedDetail);
         }
-        return cachedDetail
+        return cachedDetail;
       }
       if (useCache) {
         return '';
