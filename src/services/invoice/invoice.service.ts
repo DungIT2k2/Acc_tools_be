@@ -714,6 +714,7 @@ export class InvoiceService implements OnModuleInit {
               khmshdgoc: invoice.khmshdgoc,
               khhdgoc: invoice.khhdgoc,
               shdgoc: invoice.shdgoc,
+              tdlhdgoc: invoice.tdlhdgoc,
               diengiai,
             };
           }),

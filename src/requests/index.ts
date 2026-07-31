@@ -45,6 +45,7 @@ export interface InvoiceData {
   khmshdgoc: string | null; // Ký hiệu mẫu số hóa đơn gốc (nếu có)
   khhdgoc: string | null; // Ký hiệu hóa đơn gốc (nếu có)
   shdgoc: string | null; // Số hóa đơn gốc (nếu có)
+  tdlhdgoc: string | null; // Ngày lập hóa đơn gốc (nếu có)
   diengiai: string; // Diễn giải
 }
 
@@ -133,6 +134,7 @@ export interface Invoice {
   khhdgoc: string | null;
   khmshdgoc: string | null;
   lhdgoc: string | null;
+  tdlhdgoc: string | null;
 
   mhdon: string;
   mtdiep: string | null;

@@ -25,6 +25,7 @@ export const TEMPLATE_EXPORT_PURCHASE_INVOICE = {
   khmshdgoc: 'Ký hiệu mẫu số hóa đơn gốc',
   khhdgoc: 'Ký hiệu hóa đơn gốc',
   shdgoc: 'Số hóa đơn gốc',
+  tdlhdgoc: 'Ngay lập hóa đơn gốc',
 };
 
 export const TEMPLATE_EXPORT_SOLD_INVOICE = {
@@ -45,6 +46,7 @@ export const TEMPLATE_EXPORT_SOLD_INVOICE = {
   khmshdgoc: 'Ký hiệu mẫu số hóa đơn gốc',
   khhdgoc: 'Ký hiệu hóa đơn gốc',
   shdgoc: 'Số hóa đơn gốc',
+  tdlhdgoc: 'Ngay lập hóa đơn gốc',
 };
 
 export const TEMPLATE_EXPORT_COMPARE_RESULT = {
