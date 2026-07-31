@@ -714,9 +714,11 @@ export class InvoiceService implements OnModuleInit {
               khmshdgoc: invoice.khmshdgoc,
               khhdgoc: invoice.khhdgoc,
               shdgoc: invoice.shdgoc,
-              tdlhdgoc: moment(invoice.tdlhdgoc)
-                .tz('Asia/Ho_Chi_Minh')
-                .format('DD/MM/YYYY'),
+              tdlhdgoc: invoice.tdlhdgoc
+                ? moment(invoice.tdlhdgoc)
+                    .tz('Asia/Ho_Chi_Minh')
+                    .format('DD/MM/YYYY')
+                : '',
               diengiai,
             };
           }),
