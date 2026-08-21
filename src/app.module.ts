@@ -5,8 +5,10 @@ import { AuthModule } from './services/auth/auth.module';
 import { InvoiceModule } from './services/invoice/invoice.module';
 import { LoggingMiddleware, VerifyMiddleware } from './middleware';
 import { RedisModule } from './services/redis/redis.module';
+import { PostgresModule } from './services/postgres/postgres.module';
 import { ConfigModule } from '@nestjs/config';
 import { FileModule } from './services/file/file.module';
+import { TaxModule } from './services/tax/tax.module';
 
 @Module({
   imports: [
@@ -16,7 +18,9 @@ import { FileModule } from './services/file/file.module';
     AuthModule,
     InvoiceModule,
     FileModule,
+    TaxModule,
     RedisModule,
+    PostgresModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -26,5 +30,6 @@ export class AppModule implements NestModule {
     consumer.apply(LoggingMiddleware).forRoutes('*');
     consumer.apply(VerifyMiddleware).forRoutes('/invoice');
     consumer.apply(VerifyMiddleware).forRoutes('/file');
+    consumer.apply(VerifyMiddleware).forRoutes('/tax');
   }
 }
