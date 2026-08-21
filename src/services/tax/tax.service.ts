@@ -13,6 +13,7 @@ import { Agent } from 'https';
 import { rootCertificates } from 'tls';
 import { PostgresService } from '../postgres/postgres.service';
 import { CreateTaxDataInput, TaxData } from '../postgres/models/tax-data.model';
+import { RedisService } from '../redis/redis.service';
 
 const GDT_BASE_URL = 'https://tracuunnt.gdt.gov.vn';
 const LOOKUP_DN_PAGE_PATH = '/tcnnt/mstdn.jsp';
@@ -20,6 +21,8 @@ const LOOKUP_CN_PAGE_PATH = '/tcnnt/mstcn.jsp';
 const CAPTCHA_PATH = '/tcnnt/captcha.png?uid=';
 const TAX_CODE_PATTERN = /^(?:\d{10}|\d{12}|\d{10}-\d{3})$/;
 const CAPTCHA_SESSION_TTL_MS = 5 * 60 * 1000;
+const TAX_LOOKUP_CACHE_TTL_SECONDS = 5 * 60;
+const TAX_LOOKUP_CACHE_PREFIX = 'tax:lookup:';
 const GLOBALSIGN_RSA_OV_SSL_CA_2018_DER_BASE64 =
   'MIIETjCCAzagAwIBAgINAe5fIh38YjvUMzqFVzANBgkqhkiG9w0BAQsFADBMMSAwHgYDVQQLExdHbG9iYWxTaWduIFJvb3QgQ0EgLSBSMzETMBEGA1UEChMKR2xvYmFsU2lnbjETMBEGA1UEAxMKR2xvYmFsU2lnbjAeFw0xODExMjEwMDAwMDBaFw0yODExMjEwMDAwMDBaMFAxCzAJBgNVBAYTAkJFMRkwFwYDVQQKExBHbG9iYWxTaWduIG52LXNhMSYwJAYDVQQDEx1HbG9iYWxTaWduIFJTQSBPViBTU0wgQ0EgMjAxODCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKdaydUMGCEAI9WXD+uu3Vxoa2uPUGATeoHLl+6OimGUSyZ59gSnKvuk2la77qCk8HuKf1UfR5NhDW5xUTolJAgvjOH3idaSz6+zpz8w7bXfIa7+9UQX/dhj2S/TgVprX9NHsKzyqzskeU8fxy7quRU6fBhMabO1IFkJXinDY+YuRluqlJBJDrnw9UqhCS98NE3QvADFBlV5Bs6i0BDxSEPouVq1lVW9MdIbPYa+oewNEtssmSStR8JvA+Z6cLVwzM0nLKWMjsIYPJLJLnNvBhBWk0Cqo8VS++XFBdZpaFwGue5RieGKDkFNm5KQConpFmvv73W+eka440eKHRwup08CAwEAAaOCASkwggElMA4GA1UdDwEB/wQEAwIBhjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBT473/yzXhnqN5vjySNiPGHAwKz6zAfBgNVHSMEGDAWgBSP8Et/qC5FJK5NUPpjmove4t0bvDA+BggrBgEFBQcBAQQyMDAwLgYIKwYBBQUHMAGGImh0dHA6Ly9vY3NwMi5nbG9iYWxzaWduLmNvbS9yb290cjMwNgYDVR0fBC8wLTAroCmgJ4YlaHR0cDovL2NybC5nbG9iYWxzaWduLmNvbS9yb290LXIzLmNybDBHBgNVHSAEQDA+MDwGBFUdIAAwNDAyBggrBgEFBQcCARYmaHR0cHM6Ly93d3cuZ2xvYmFsc2lnbi5jb20vcmVwb3NpdG9yeS8wDQYJKoZIhvcNAQELBQADggEBAJmQyC1fQorUC2bbmANzEdSIhlIoU4r7rd/9c446ZwTbw1MUcBQJfMPg+NccmBqixD7b6QDjynCy8SIwIVbb0615XoFYC20UgDX1b10d65pHBf9ZjQCxQNqQmJYaumxtf4z1s4DfjGRzNpZ5eWl06r/4ngGPoJVpjemEuunl1Ig423g7mNA2eymw0lIYkN5SQwCuaifIFJ6GlazhgDEwfpolu4usBCOmmQDo8dIm7A9+O4orkjgTHY+GzYZSR+Y0fFukAj6KYXwidlNalFMzhriSqHKvoflShx8xpfywgVcvzfTO3PYkz6fiNJBonf6q8amaEsybwMbDqKWwIX7eSPY=';
 
@@ -45,6 +48,7 @@ export type TaxLookupResult = {
 export type TaxpayerInformation = {
   STT: string;
   MST: string;
+  created_at: string;
   'Tên người nộp thuế': string;
   'Địa chỉ trụ sở/địa chỉ kinh doanh': string;
   'Cơ quan thuế quản lý': string;
@@ -56,7 +60,10 @@ export class TaxService {
   private readonly captchaSessions = new Map<string, CaptchaSession>();
   private readonly httpsAgent = this.createHttpsAgent();
 
-  constructor(private readonly postgresService: PostgresService) {}
+  constructor(
+    private readonly postgresService: PostgresService,
+    private readonly redisService: RedisService,
+  ) {}
 
   async createCaptchaSession(type?: string): Promise<{
     lookupId: string;
@@ -123,6 +130,11 @@ export class TaxService {
     }
     if (!normalizedCaptcha) {
       throw new BadRequestException('Vui lòng nhập mã xác nhận');
+    }
+
+    const cachedResult = await this.getCachedTaxLookup(normalizedTaxCode);
+    if (cachedResult) {
+      return cachedResult;
     }
 
     const session = this.getCaptchaSession(lookupId);
@@ -215,11 +227,47 @@ export class TaxService {
     }
 
     await this.saveTaxData(information);
-
-    return {
+    const result = {
       taxCode: normalizedTaxCode,
       information,
     };
+    await this.cacheTaxLookup(normalizedTaxCode, result);
+
+    return result;
+  }
+
+  private async getCachedTaxLookup(
+    taxCode: string,
+  ): Promise<TaxLookupResult | null> {
+    try {
+      const cachedResult = await this.redisService.get(
+        `${TAX_LOOKUP_CACHE_PREFIX}${taxCode}`,
+      );
+      if (!cachedResult) return null;
+
+      return JSON.parse(cachedResult) as TaxLookupResult;
+    } catch (error) {
+      Logger.warn(error, TaxService.name);
+      return null;
+    }
+  }
+
+  private async cacheTaxLookup(
+    taxCode: string,
+    result: TaxLookupResult,
+  ): Promise<void> {
+    try {
+      for (const information of result.information) {
+        const taxCodeKey = information.MST || taxCode;
+        await this.redisService.set(
+          `${TAX_LOOKUP_CACHE_PREFIX}${taxCodeKey}`,
+          JSON.stringify(result),
+          TAX_LOOKUP_CACHE_TTL_SECONDS,
+        );
+      }
+    } catch (error) {
+      Logger.warn(error, TaxService.name);
+    }
   }
 
   private async saveTaxData(information: TaxpayerInformation[]): Promise<void> {
@@ -253,6 +301,7 @@ export class TaxService {
     return rows.map((row, index) => ({
       STT: String(index + 1),
       MST: row.tax_id,
+      created_at: row.created_at || new Date().toISOString(),
       'Tên người nộp thuế': row.tax_name || '',
       'Địa chỉ trụ sở/địa chỉ kinh doanh': row.address || '',
       'Cơ quan thuế quản lý': row.tax_authority || '',
@@ -360,6 +409,7 @@ export class TaxService {
   private extractInformation(html: string): TaxpayerInformation[] {
     const $ = cheerio.load(html);
     const table = $('#resultContainer table.ta_border').first();
+    const createdAt = new Date().toISOString();
     const rawHeaders = table
       .find('tr')
       .first()
@@ -409,6 +459,7 @@ export class TaxService {
         return {
           STT: values[sttIndex] || '',
           MST: values[mstIndex] || '',
+          created_at: createdAt,
           'Tên người nộp thuế': values[nameIndex] || '',
           'Địa chỉ trụ sở/địa chỉ kinh doanh':
             addressIndex !== undefined ? values[addressIndex] || '' : '',
