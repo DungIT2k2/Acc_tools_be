@@ -80,16 +80,16 @@ export class TaxService {
   private async fetchCaptchaImage(
     session: CaptchaSession,
   ): Promise<{ image: string; contentType: string }> {
+    const requestUrl = new URL(session.captchaPath, GDT_BASE_URL).toString();
+
     try {
-      const response = await axios.get<ArrayBuffer>(
-        new URL(session.captchaPath, GDT_BASE_URL).toString(),
-        {
-          responseType: 'arraybuffer',
-          timeout: 15_000,
-          httpsAgent: this.httpsAgent,
-          headers: { Cookie: session.cookies },
-        },
-      );
+      const response = await axios.get<ArrayBuffer>(requestUrl, {
+        responseType: 'arraybuffer',
+        timeout: 15_000,
+        httpsAgent: this.httpsAgent,
+        headers: { Cookie: session.cookies },
+      });
+      Logger.log(`Fetching captcha from URL: ${requestUrl} => Done`);
       const contentType = response.headers['content-type'] || 'image/png';
       session.cookies = this.mergeCookies(
         session.cookies,
@@ -142,10 +142,11 @@ export class TaxService {
     formData.set(session.captchaField, normalizedCaptcha);
 
     let html: string;
+    const requestUrl = new URL(session.formAction, GDT_BASE_URL).toString();
 
     try {
       const response = await axios.post<string>(
-        new URL(session.formAction, GDT_BASE_URL).toString(),
+        requestUrl,
         formData.toString(),
         {
           timeout: 15_000,
@@ -158,6 +159,7 @@ export class TaxService {
           },
         },
       );
+      Logger.log(`Fetching tax lookup from URL: ${requestUrl} => Done`);
       html = response.data;
       this.logHtml('lookup response', html);
     } catch (error) {
@@ -167,6 +169,10 @@ export class TaxService {
         this.mapTaxDataToTaxpayerInformation(cachedRows);
 
       if (cachedInformation.length > 0) {
+        Logger.log(
+          `Fallback tax data from DB for taxCode ${normalizedTaxCode}: ${cachedInformation.length} row(s)`,
+          TaxService.name,
+        );
         return {
           taxCode: normalizedTaxCode,
           information: cachedInformation,
@@ -191,6 +197,10 @@ export class TaxService {
         this.mapTaxDataToTaxpayerInformation(cachedRows);
 
       if (cachedInformation.length > 0) {
+        Logger.log(
+          `Fallback tax data from DB for taxCode ${normalizedTaxCode}: ${cachedInformation.length} row(s)`,
+          TaxService.name,
+        );
         return {
           taxCode: normalizedTaxCode,
           information: cachedInformation,

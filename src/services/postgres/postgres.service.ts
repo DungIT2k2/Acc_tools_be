@@ -23,17 +23,34 @@ export class PostgresService implements OnModuleDestroy {
         tax_authority = excluded.tax_authority,
         status = excluded.status
     `;
+
+    Logger.log(
+      `Query upsert public.tax_data size=${rows.length} => Done`,
+      PostgresService.name,
+    );
   }
 
   async getTaxDataByTaxCode(taxCode: string): Promise<TaxData[]> {
     const normalizedTaxCode = taxCode.trim();
 
-    return this.sql<TaxData[]>`
+    Logger.log(
+      `Query select public.tax_data by tax_id=${normalizedTaxCode} => Start`,
+      PostgresService.name,
+    );
+
+    const rows = await this.sql<TaxData[]>`
       select id, created_at, tax_id, tax_name, address, tax_authority, status
       from public.tax_data
       where trim(tax_id) = ${normalizedTaxCode}
       order by tax_id
     `;
+
+    Logger.log(
+      `Query select public.tax_data by tax_id=${normalizedTaxCode} => Done (${rows.length} row(s))`,
+      PostgresService.name,
+    );
+
+    return rows;
   }
 
   async onModuleDestroy() {
