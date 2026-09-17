@@ -337,6 +337,9 @@ export class InvoiceService implements OnModuleInit {
             cvalue,
           },
           {
+            headers: {
+              'request-id': randomUUID(),
+            },
             timeout: 5000,
           },
         );
@@ -361,6 +364,7 @@ export class InvoiceService implements OnModuleInit {
           `${this.baseUrlInvoice}/security-taxpayer/profile`,
           {
             headers: {
+              'request-id': randomUUID(),
               Authorization: `Bearer ${token as string}`,
             },
             timeout: 5000,
@@ -662,6 +666,7 @@ export class InvoiceService implements OnModuleInit {
 
         const res = await axios.get(requestUrl as string, {
           headers: {
+            'request-id': randomUUID(),
             Authorization: `Bearer ${token}`,
           },
           timeout: 15000,
@@ -1789,6 +1794,7 @@ export class InvoiceService implements OnModuleInit {
       const url = isSco ? requestUrlSco : requestUrl;
       const res = await axios.get(url, {
         headers: {
+          'request-id': randomUUID(),
           Authorization: `Bearer ${token}`,
         },
         timeout: 5000,
