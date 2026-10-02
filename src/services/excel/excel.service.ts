@@ -145,9 +145,9 @@ export class ExcelService {
           masothue: row[6],
           mathang: row[7],
           sotien_net: row[9],
-          thuesuat: type == 'sell' ? null : row[10] || 0,
-          sotien_tax: type == 'sell' ? row[10] || 0 : row[11] || 0,
-          ghichu: type == 'sell' ? row[11] : row[12],
+          thuesuat: type == 'sell' ? row[10] : row[10] || 0,
+          sotien_tax: type == 'sell' ? row[11] || 0 : row[11] || 0,
+          ghichu: type == 'sell' ? row[12] : row[12],
         };
         if (
           typeof dataRow.sott === 'number' &&
