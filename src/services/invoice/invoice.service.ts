@@ -672,9 +672,19 @@ export class InvoiceService implements OnModuleInit {
           timeout: 15000,
         });
 
-        Logger.log(`Fetching invoices from URL: ${requestUrl} => Done`);
-        const data: Invoice[] = res?.data?.datas || [];
+        const data: Invoice[] = res?.data?.datas;
+        if (!data) {
+          Logger.warn(
+            `Response unexpected or empty for URL: ${requestUrl} - Response data: ${JSON.stringify(res?.data)}`,
+          );
+          throw new Error(
+            `Response unexpected or empty for URL: ${requestUrl}`,
+          );
+        }
         nextState = res?.data?.state;
+        Logger.log(
+          `Fetching invoices from URL: ${requestUrl} => Done - Size: ${data.length} invoices - Next state: ${nextState}`,
+        );
 
         allInvoices.push(...data);
         if (nextState) {
