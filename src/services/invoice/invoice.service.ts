@@ -1614,8 +1614,8 @@ export class InvoiceService implements OnModuleInit {
         taxSuccessArr.push(key);
         let success = true;
         const nghdchr = data.nghdchr;
-        const sotien_net = data.sotien_net;
-        const sotien_tax = data.sotien_tax;
+        const sotien_net = data.sotien_net || 0;
+        const sotien_tax = data.sotien_tax || 0;
         if (nghdchr != matchData.tdlap) {
           myErrorArr.push({
             row: stt,
