@@ -20,7 +20,7 @@ export class LoggingMiddleware implements NestMiddleware {
         return req.ip ?? req.socket.remoteAddress ?? 'unknown';
     }
 
-    private getUsernameFromToken(req: Request): string | undefined {
+    private getDataFromToken(req: Request): string | undefined {
         const authHeader = req.headers['authorization'];
         if (!authHeader) return undefined;
 
@@ -29,7 +29,7 @@ export class LoggingMiddleware implements NestMiddleware {
 
         try {
             const decoded = this.jwtService.decode(token) as Record<string, any>;
-            return decoded?.username;
+            return decoded;
         } catch {
             return undefined;
         }
@@ -39,7 +39,10 @@ export class LoggingMiddleware implements NestMiddleware {
         const { method, originalUrl, body } = req;
         const txId = randomUUID();
         const start = Date.now();
-        const username = this.getUsernameFromToken(req);
+        const dataFromToken: any = this.getDataFromToken(req);
+        const username = dataFromToken?.username;
+        const userInvoice = dataFromToken?.usernameInvoice;
+        const fullName = dataFromToken?.fullName;
         const ip = this.getClientIp(req);
 
         req['txId'] = txId;
@@ -50,7 +53,7 @@ export class LoggingMiddleware implements NestMiddleware {
             if (body?.password) {
                 this.logger.log(`--> request - ${username} - ${ip} | ${method} ${originalUrl} | payload: ${JSON.stringify({ ...body, password: '******' })}`);
             } else {
-                this.logger.log(`--> request - ${username} - ${ip} | ${method} ${originalUrl} | payload: ${JSON.stringify(body)}`);
+                this.logger.log(`--> request - ${username} - ${ip} - ${userInvoice} - ${fullName} | ${method} ${originalUrl} | payload: ${JSON.stringify(body)}`);
             }
 
             res.on('finish', () => {
