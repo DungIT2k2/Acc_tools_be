@@ -86,5 +86,10 @@ export const INVOICE_TTXLY_MAP: Record<number, string> = {
   4: 'Hóa đơn không đủ điều kiện cấp mã',
   5: 'Đã cấp mã hóa đơn',
   6: 'Cục Thuế đã nhận không mã',
-  8: 'Cục Thuế đã nhận hóa đơn có mã khởi tạo từ máy tính tiền'
+  8: 'Cục Thuế đã nhận hóa đơn có mã khởi tạo từ máy tính tiền',
+};
+
+export const TYPE_TRANSCODING_EXCEL = {
+  UniToVni: 'UniToVni',
+  VniToUni: 'VniToUni',
 };

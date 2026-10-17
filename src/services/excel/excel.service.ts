@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { TEMPLATE_EXPORT_COMPARE_RESULT } from 'src/constants';
-import { toUnicode } from 'vietnamese-conversion';
+import {
+  TEMPLATE_EXPORT_COMPARE_RESULT,
+  TYPE_TRANSCODING_EXCEL,
+} from 'src/constants';
+import { toUnicode, toVNI } from 'vietnamese-conversion';
 import { UserInvoiceDataNew } from 'src/requests';
 
 @Injectable()
@@ -59,7 +62,34 @@ export class ExcelService {
     return text;
   }
 
-  public async transcodingExcelBuffer(buffer: any, type: string) {
+  private async transcodingUniToVniExcel(buffer: any) {
+    const workbook = new ExcelJS.Workbook();
+
+    await workbook.xlsx.load(buffer as ExcelJS.Buffer);
+
+    workbook.eachSheet((worksheet) => {
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          if (cell.master !== cell) {
+            return;
+          }
+          if (typeof cell.value === 'string') {
+            cell.value = toVNI(cell.value.normalize('NFC'), 'unicode');
+          }
+          cell.font = {
+            ...cell.font,
+            name: 'VNI-Times',
+          };
+        });
+      });
+    });
+
+    const output = await workbook.xlsx.writeBuffer();
+
+    return Buffer.from(output);
+  }
+
+  private async transcodingVniToUniExcel(buffer: any) {
     const workbook = new ExcelJS.Workbook();
 
     await workbook.xlsx.load(buffer as ExcelJS.Buffer);
@@ -84,6 +114,17 @@ export class ExcelService {
     const output = await workbook.xlsx.writeBuffer();
 
     return Buffer.from(output);
+  }
+
+  public async transcodingExcelBuffer(buffer: any, type: string) {
+    switch (type) {
+      case TYPE_TRANSCODING_EXCEL.UniToVni:
+        return this.transcodingUniToVniExcel(buffer);
+      case TYPE_TRANSCODING_EXCEL.VniToUni:
+        return this.transcodingVniToUniExcel(buffer);
+      default:
+        throw new Error(`Unsupported transcoding type: ${type}`);
+    }
   }
 
   public getHeaderInExcelBuffer(buffer: Buffer): object[] {
