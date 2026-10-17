@@ -744,6 +744,9 @@ export class InvoiceService implements OnModuleInit {
           JSON.stringify(result),
           8 * 60 * 60,
         );
+        Logger.log(
+          `Get invoices from URL: ${url} => Done - Size: ${result.length} invoices`,
+        );
 
         return result as T;
       }
