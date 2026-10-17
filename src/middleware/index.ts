@@ -20,7 +20,7 @@ export class LoggingMiddleware implements NestMiddleware {
         return req.ip ?? req.socket.remoteAddress ?? 'unknown';
     }
 
-    private getDataFromToken(req: Request): any | undefined {
+    private getDataFromToken(req: Request): any {
         const authHeader = req.headers['authorization'];
         if (!authHeader) return undefined;
 
@@ -28,7 +28,7 @@ export class LoggingMiddleware implements NestMiddleware {
         if (!token) return undefined;
 
         try {
-            const decoded = this.jwtService.decode(token) as Record<any>;
+            const decoded = this.jwtService.decode(token);
             return decoded;
         } catch {
             return undefined;
