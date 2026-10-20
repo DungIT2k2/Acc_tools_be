@@ -456,10 +456,22 @@ export class InvoiceService implements OnModuleInit {
 
   async getPurchaseInvoice(
     req: any,
-    query: { from: string; to: string; renew?: string; renewDetail?: string },
+    query: {
+      from: string;
+      to: string;
+      renew?: string;
+      renewDetail?: string;
+      renewType?: string;
+    },
     isAuto: boolean = false,
   ): Promise<any> {
-    const { from, to, renew = 'false', renewDetail = 'false' } = query;
+    const {
+      from,
+      to,
+      renew = 'false',
+      renewDetail = 'false',
+      renewType,
+    } = query;
     const renewCache = renew === 'true';
     const renewDetailCache = renewDetail === 'true';
     if (!from || !to) {
@@ -500,6 +512,7 @@ export class InvoiceService implements OnModuleInit {
         index === froms.length - 1,
         renewCache,
         renewDetailCache,
+        renewType,
       );
       if (isError) {
         checkError = true;
@@ -545,6 +558,7 @@ export class InvoiceService implements OnModuleInit {
     lastWait = false,
     renewCache = false,
     renewDetailCache = false,
+    renewType?: string,
   ): Promise<{ data: object; isError: boolean }> {
     let isError = false;
     const key = `invoice_${usernameInvoice}`;
@@ -554,64 +568,94 @@ export class InvoiceService implements OnModuleInit {
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
 
     const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
-    if (!renewCache) {
+    let dataCacheRes = {
+      invoiceIssuedData: [],
+      invoiceNoCodeData: [],
+      invoiceCashRegisterData: [],
+    };
+    let checkCache = false;
+    if (!renewCache || renewType) {
       const dataCache = await this.redisService.get(cacheKey);
       if (dataCache) {
-        if (!renewDetailCache) {
+        if (!renewDetailCache && !renewType) {
           return { data: JSON.parse(dataCache) as object, isError };
         }
         const dataCacheParsed = JSON.parse(dataCache);
+        checkCache = true;
         let { invoiceIssuedData, invoiceNoCodeData, invoiceCashRegisterData } =
           dataCacheParsed;
-        if (invoiceIssuedData.length > 0) {
-          invoiceIssuedData = await this.getAllInvoiceDetailInMap(
-            invoiceIssuedData as Invoice[],
-            tokenInvoice,
-          );
+        if (renewDetailCache) {
+          if (invoiceIssuedData.length > 0) {
+            invoiceIssuedData = await this.getAllInvoiceDetailInMap(
+              invoiceIssuedData as Invoice[],
+              tokenInvoice,
+            );
+          }
+          if (invoiceNoCodeData.length > 0) {
+            invoiceNoCodeData = await this.getAllInvoiceDetailInMap(
+              invoiceNoCodeData as Invoice[],
+              tokenInvoice,
+            );
+          }
+          if (invoiceCashRegisterData.length > 0) {
+            invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
+              invoiceCashRegisterData as Invoice[],
+              tokenInvoice,
+              true,
+            );
+          }
         }
-        if (invoiceNoCodeData.length > 0) {
-          invoiceNoCodeData = await this.getAllInvoiceDetailInMap(
-            invoiceNoCodeData as Invoice[],
-            tokenInvoice,
-          );
-        }
-        if (invoiceCashRegisterData.length > 0) {
-          invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
-            invoiceCashRegisterData as Invoice[],
-            tokenInvoice,
-            true,
-          );
-        }
-        const dataRes = {
+        dataCacheRes = {
           invoiceIssuedData,
           invoiceNoCodeData,
           invoiceCashRegisterData,
         };
 
-        await this.redisService.set(
-          cacheKey,
-          JSON.stringify(dataRes),
-          24 * 60 * 60 * 2,
-        );
-        return { data: dataRes, isError };
+        if (!renewType) {
+          await this.redisService.set(
+            cacheKey,
+            JSON.stringify(dataCacheRes),
+            24 * 60 * 60 * 2,
+          );
+          return { data: dataCacheRes, isError };
+        }
       }
     } else {
-      await this.redisService.del(cacheKey);
+      if (!renewType) await this.redisService.del(cacheKey);
     }
 
+    let invoiceIssuedDataRes: InvoiceData[] = [];
+    let invoiceNoCodeDataRes: InvoiceData[] = [];
+    let invoiceCashRegisterDataRes: InvoiceData[] = [];
     const cacheTempKey = `cache_${cacheKey}`;
     const urlInvoiceIssued = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==5`;
-    const invoiceIssuedDataRes: InvoiceData[] = await this.callGetInvoice<
-      InvoiceData[]
-    >(tokenInvoice, urlInvoiceIssued, cacheTempKey);
+    invoiceIssuedDataRes =
+      !checkCache || (renewCache && renewType == 'invoiceIssued')
+        ? await this.callGetInvoice<InvoiceData[]>(
+            tokenInvoice,
+            urlInvoiceIssued,
+            cacheTempKey,
+          )
+        : dataCacheRes?.invoiceIssuedData;
     const urlInvoiceNoCode = `${this.baseUrlInvoice}/query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==6`;
-    const invoiceNoCodeDataRes: InvoiceData[] = await this.callGetInvoice<
-      InvoiceData[]
-    >(tokenInvoice, urlInvoiceNoCode, cacheTempKey);
+    invoiceNoCodeDataRes =
+      !checkCache || (renewCache && renewType == 'invoiceNoCode')
+        ? await this.callGetInvoice<InvoiceData[]>(
+            tokenInvoice,
+            urlInvoiceNoCode,
+            cacheTempKey,
+          )
+        : dataCacheRes?.invoiceNoCodeData;
     const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    const invoiceCashRegisterDataRes: InvoiceData[] = await this.callGetInvoice<
-      InvoiceData[]
-    >(tokenInvoice, urlInvoiceCashRegister, cacheTempKey, true);
+    invoiceCashRegisterDataRes =
+      !checkCache || (renewCache && renewType == 'invoiceCashRegister')
+        ? await this.callGetInvoice<InvoiceData[]>(
+            tokenInvoice,
+            urlInvoiceCashRegister,
+            cacheTempKey,
+            true,
+          )
+        : dataCacheRes?.invoiceCashRegisterData;
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -1207,10 +1251,22 @@ export class InvoiceService implements OnModuleInit {
 
   async getSoldInvoice(
     req: any,
-    query: { from: string; to: string; renew?: string; renewDetail?: string },
+    query: {
+      from: string;
+      to: string;
+      renew?: string;
+      renewDetail?: string;
+      renewType?: string;
+    },
     isAuto = false,
   ): Promise<any> {
-    const { from, to, renew = 'false', renewDetail = 'false' } = query;
+    const {
+      from,
+      to,
+      renew = 'false',
+      renewDetail = 'false',
+      renewType,
+    } = query;
     const renewCache = renew === 'true';
     const renewDetailCache = renewDetail === 'true';
     if (!from || !to) {
@@ -1250,6 +1306,7 @@ export class InvoiceService implements OnModuleInit {
         index === froms.length - 1,
         renewCache,
         renewDetailCache,
+        renewType,
       );
       if (data['invoiceElectronicData'] && data['invoiceCashRegisterData']) {
         dataMerged['invoiceElectronicData'] = [
@@ -1284,6 +1341,7 @@ export class InvoiceService implements OnModuleInit {
     lastWait = false,
     renewCache = false,
     renewDetailCache = false,
+    renewType?: string,
   ): Promise<any> {
     let isError = false;
     const key = `invoice_${usernameInvoice}`;
@@ -1293,54 +1351,76 @@ export class InvoiceService implements OnModuleInit {
       throw new HttpException('Not found token', HttpStatus.NOT_FOUND);
 
     const tokenInvoice: string = JSON.parse(token)?.tokenInvoice;
-
-    if (!renewCache) {
+    let dataCacheRes = {
+      invoiceElectronicData: [],
+      invoiceCashRegisterData: [],
+    };
+    let checkCache = false;
+    if (!renewCache || renewType) {
       const dataCache = await this.redisService.get(cacheKey);
       if (dataCache) {
-        if (!renewDetailCache) {
+        if (!renewDetailCache && !renewType) {
           return { data: JSON.parse(dataCache) as object, isError };
         }
 
         const dataCacheParsed = JSON.parse(dataCache);
+        checkCache = true;
         let { invoiceElectronicData, invoiceCashRegisterData } =
           dataCacheParsed;
-        if (invoiceElectronicData.length > 0) {
-          invoiceElectronicData = await this.getAllInvoiceDetailInMap(
-            invoiceElectronicData as Invoice[],
-            tokenInvoice,
-          );
+        if (renewDetailCache) {
+          if (invoiceElectronicData.length > 0) {
+            invoiceElectronicData = await this.getAllInvoiceDetailInMap(
+              invoiceElectronicData as Invoice[],
+              tokenInvoice,
+            );
+          }
+          if (invoiceCashRegisterData.length > 0) {
+            invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
+              invoiceCashRegisterData as Invoice[],
+              tokenInvoice,
+            );
+          }
         }
-        if (invoiceCashRegisterData.length > 0) {
-          invoiceCashRegisterData = await this.getAllInvoiceDetailInMap(
-            invoiceCashRegisterData as Invoice[],
-            tokenInvoice,
-          );
-        }
-        const dataRes = {
+        dataCacheRes = {
           invoiceElectronicData,
           invoiceCashRegisterData,
         };
 
-        await this.redisService.set(
-          cacheKey,
-          JSON.stringify(dataRes),
-          24 * 60 * 60 * 2,
-        );
-        return { data: dataRes, isError };
+        if (!renewType) {
+          await this.redisService.set(
+            cacheKey,
+            JSON.stringify(dataCacheRes),
+            24 * 60 * 60 * 2,
+          );
+          return { data: dataCacheRes, isError };
+        }
       }
     } else {
-      await this.redisService.del(cacheKey);
+      if (!renewType) await this.redisService.del(cacheKey);
     }
 
+    let invoiceElectronicDataRes: InvoiceData[] = [];
+    let invoiceCashRegisterDataRes: InvoiceData[] = [];
     const cacheTempKey = `cache_${cacheKey}`;
     const urlInvoiceElectronic = `${this.baseUrlInvoice}/query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
-    const invoiceElectronicDataRes: InvoiceData[] = await this.callGetInvoice<
-      InvoiceData[]
-    >(tokenInvoice, urlInvoiceElectronic, cacheTempKey);
+    invoiceElectronicDataRes =
+      !checkCache || (renewCache && renewType == 'invoiceElectronic')
+        ? await this.callGetInvoice<InvoiceData[]>(
+            tokenInvoice,
+            urlInvoiceElectronic,
+            cacheTempKey,
+          )
+        : dataCacheRes?.invoiceElectronicData;
     const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
-    const invoiceCashRegisterDataRes: InvoiceData[] = await this.callGetInvoice<
-      InvoiceData[]
-    >(tokenInvoice, urlInvoiceCashRegister, cacheTempKey, true);
+    invoiceCashRegisterDataRes =
+      !checkCache || (renewCache && renewType == 'invoiceCashRegister')
+        ? await this.callGetInvoice<InvoiceData[]>(
+            tokenInvoice,
+            urlInvoiceCashRegister,
+            cacheTempKey,
+            true,
+          )
+        : dataCacheRes?.invoiceCashRegisterData;
 
     const dataRes = {
       invoiceElectronicData: invoiceElectronicDataRes,
