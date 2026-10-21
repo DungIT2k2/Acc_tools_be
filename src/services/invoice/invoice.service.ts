@@ -462,6 +462,7 @@ export class InvoiceService implements OnModuleInit {
       renew?: string;
       renewDetail?: string;
       renewType?: string;
+      isCompare?: boolean;
     },
     isAuto: boolean = false,
   ): Promise<any> {
@@ -471,6 +472,7 @@ export class InvoiceService implements OnModuleInit {
       renew = 'false',
       renewDetail = 'false',
       renewType,
+      isCompare = false,
     } = query;
     const renewCache = renew === 'true';
     const renewDetailCache = renewDetail === 'true';
@@ -513,6 +515,7 @@ export class InvoiceService implements OnModuleInit {
         renewCache,
         renewDetailCache,
         renewType,
+        isCompare,
       );
       if (isError) {
         checkError = true;
@@ -559,6 +562,7 @@ export class InvoiceService implements OnModuleInit {
     renewCache = false,
     renewDetailCache = false,
     renewType?: string,
+    isCompare?: boolean,
   ): Promise<{ data: object; isError: boolean }> {
     let isError = false;
     const key = `invoice_${usernameInvoice}`;
@@ -619,6 +623,9 @@ export class InvoiceService implements OnModuleInit {
           );
           return { data: dataCacheRes, isError };
         }
+      }
+      if (isCompare) {
+        return { data: dataCacheRes, isError };
       }
     } else {
       if (!renewType) await this.redisService.del(cacheKey);
@@ -824,6 +831,7 @@ export class InvoiceService implements OnModuleInit {
   private mergeInvoiceData<T extends object>(data: object): T[] {
     const dataMerged = Object.values(data)
       .flat()
+      .filter((item) => item && !item.error && item.tdlap)
       .sort((a, b) => {
         const dateA = parseDate(a?.tdlap as string);
         const dateB = parseDate(b?.tdlap as string);
@@ -885,7 +893,11 @@ export class InvoiceService implements OnModuleInit {
     const { from, to } = formData;
     const myFile = files?.File?.[0];
 
-    const data: object = await this.getPurchaseInvoice(req, { from, to });
+    const data: object = await this.getPurchaseInvoice(req, {
+      from,
+      to,
+      isCompare: true,
+    });
 
     if (!myFile)
       throw new HttpException('Vui lòng import file', HttpStatus.BAD_REQUEST);
@@ -1257,6 +1269,7 @@ export class InvoiceService implements OnModuleInit {
       renew?: string;
       renewDetail?: string;
       renewType?: string;
+      isCompare?: boolean;
     },
     isAuto = false,
   ): Promise<any> {
@@ -1266,6 +1279,7 @@ export class InvoiceService implements OnModuleInit {
       renew = 'false',
       renewDetail = 'false',
       renewType,
+      isCompare = false,
     } = query;
     const renewCache = renew === 'true';
     const renewDetailCache = renewDetail === 'true';
@@ -1307,6 +1321,7 @@ export class InvoiceService implements OnModuleInit {
         renewCache,
         renewDetailCache,
         renewType,
+        isCompare,
       );
       if (data['invoiceElectronicData'] && data['invoiceCashRegisterData']) {
         dataMerged['invoiceElectronicData'] = [
@@ -1342,6 +1357,7 @@ export class InvoiceService implements OnModuleInit {
     renewCache = false,
     renewDetailCache = false,
     renewType?: string,
+    isCompare = false,
   ): Promise<any> {
     let isError = false;
     const key = `invoice_${usernameInvoice}`;
@@ -1394,6 +1410,9 @@ export class InvoiceService implements OnModuleInit {
           );
           return { data: dataCacheRes, isError };
         }
+      }
+      if (isCompare) {
+        return { data: dataCacheRes, isError };
       }
     } else {
       if (!renewType) await this.redisService.del(cacheKey);
@@ -1458,7 +1477,11 @@ export class InvoiceService implements OnModuleInit {
     const { from, to } = formData;
     const myFile = files?.File?.[0];
 
-    const data: object = await this.getSoldInvoice(req, { from, to });
+    const data: object = await this.getSoldInvoice(req, {
+      from,
+      to,
+      isCompare: true,
+    });
 
     if (!myFile)
       throw new HttpException('Vui lòng import file', HttpStatus.BAD_REQUEST);
