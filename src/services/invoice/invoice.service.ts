@@ -163,6 +163,7 @@ export class InvoiceService implements OnModuleInit {
     await this.redisService.set(
       invoiceTaskQueueKey(usernameInvoice, id),
       JSON.stringify(task),
+      1 * 60 * 60,
     );
     await this.redisService.lrem(invoiceTaskQueueOrderKey(usernameInvoice), id);
 
