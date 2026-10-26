@@ -8,7 +8,11 @@ export class SystemService {
   constructor(private readonly redisService: RedisService) {}
 
   async getStatus(): Promise<object> {
-    const status = (await this.redisService.get(SYSTEM_STATUS_KEY))?.trim().toUpperCase();
+    // Ưu tiên env SYSTEM_STATUS (tiện cho dev local), fallback về Redis
+    const rawStatus =
+      process.env.SYSTEM_STATUS ||
+      (await this.redisService.get(SYSTEM_STATUS_KEY));
+    const status = rawStatus?.trim().toUpperCase();
 
     if (status === 'DOWN') {
       throw new ServiceUnavailableException('Hệ thống đang bảo trì');
