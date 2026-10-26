@@ -654,16 +654,17 @@ export class InvoiceService implements OnModuleInit {
             cacheTempKey,
           )
         : dataCacheRes?.invoiceNoCodeData;
-    const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    invoiceCashRegisterDataRes =
-      !checkCache || (renewCache && renewType == 'invoiceCashRegister')
-        ? await this.callGetInvoice<InvoiceData[]>(
-            tokenInvoice,
-            urlInvoiceCashRegister,
-            cacheTempKey,
-            true,
-          )
-        : dataCacheRes?.invoiceCashRegisterData;
+    // const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
+    // invoiceCashRegisterDataRes =
+    //   !checkCache || (renewCache && renewType == 'invoiceCashRegister')
+    //     ? await this.callGetInvoice<InvoiceData[]>(
+    //         tokenInvoice,
+    //         urlInvoiceCashRegister,
+    //         cacheTempKey,
+    //         true,
+    //       )
+    //     : dataCacheRes?.invoiceCashRegisterData;
+    invoiceCashRegisterDataRes = [];
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -1431,16 +1432,17 @@ export class InvoiceService implements OnModuleInit {
             cacheTempKey,
           )
         : dataCacheRes?.invoiceElectronicData;
-    const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
-    invoiceCashRegisterDataRes =
-      !checkCache || (renewCache && renewType == 'invoiceCashRegister')
-        ? await this.callGetInvoice<InvoiceData[]>(
-            tokenInvoice,
-            urlInvoiceCashRegister,
-            cacheTempKey,
-            true,
-          )
-        : dataCacheRes?.invoiceCashRegisterData;
+    // const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
+    // invoiceCashRegisterDataRes =
+    //   !checkCache || (renewCache && renewType == 'invoiceCashRegister')
+    //     ? await this.callGetInvoice<InvoiceData[]>(
+    //         tokenInvoice,
+    //         urlInvoiceCashRegister,
+    //         cacheTempKey,
+    //         true,
+    //       )
+    //     : dataCacheRes?.invoiceCashRegisterData;
+    invoiceCashRegisterDataRes = [];
 
     const dataRes = {
       invoiceElectronicData: invoiceElectronicDataRes,
