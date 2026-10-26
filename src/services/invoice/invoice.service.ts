@@ -741,15 +741,14 @@ export class InvoiceService implements OnModuleInit {
 
         allInvoices.push(...data);
         if (nextState) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       } while (nextState);
 
+      if (!lastWait) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
       if (allInvoices.length > 0) {
-        if (!lastWait) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-
         const filtered = allInvoices.filter((invoice: Invoice) => {
           const name = invoice?.nbten?.toUpperCase() || '';
           return !name.includes('NGÂN HÀNG') && !name.includes('NGAN HANG');
@@ -810,7 +809,7 @@ export class InvoiceService implements OnModuleInit {
         `Error fetching purchase invoices: ${error.response?.data?.message || error.message} - url: ${url}`,
       );
       if (retry <= 2) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         return this.callGetInvoice<T>(
           token,
           url,
@@ -1936,7 +1935,7 @@ export class InvoiceService implements OnModuleInit {
         30 * 24 * 60 * 60,
       );
       Logger.log(`Fetching detail from URL: ${url} => Done`);
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       return diengiai;
     } catch (error) {
       Logger.error(
