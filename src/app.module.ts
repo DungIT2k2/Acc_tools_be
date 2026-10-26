@@ -9,6 +9,7 @@ import { PostgresModule } from './services/postgres/postgres.module';
 import { ConfigModule } from '@nestjs/config';
 import { FileModule } from './services/file/file.module';
 import { TaxModule } from './services/tax/tax.module';
+import { SystemModule } from './services/system/system.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TaxModule } from './services/tax/tax.module';
     InvoiceModule,
     FileModule,
     TaxModule,
+    SystemModule,
     RedisModule,
     PostgresModule,
   ],
