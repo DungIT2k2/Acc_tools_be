@@ -741,7 +741,7 @@ export class InvoiceService implements OnModuleInit {
 
         allInvoices.push(...data);
         if (nextState) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       } while (nextState);
 
