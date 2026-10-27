@@ -8,7 +8,6 @@ export class SystemService {
   constructor(private readonly redisService: RedisService) {}
 
   async getStatus(): Promise<object> {
-    // Ưu tiên env SYSTEM_STATUS (tiện cho dev local), fallback về Redis
     const rawStatus =
       process.env.SYSTEM_STATUS ||
       (await this.redisService.get(SYSTEM_STATUS_KEY));

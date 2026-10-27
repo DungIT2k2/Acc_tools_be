@@ -19,6 +19,8 @@ import {
 import { ExcelService } from '../excel/excel.service';
 import { AuthService } from '../auth/auth.service';
 import axios from 'axios';
+import sharp from 'sharp';
+import { createWorker, PSM, Worker } from 'tesseract.js';
 import moment from 'moment-timezone';
 import { RedisService } from '../redis/redis.service';
 import { parseDate } from 'src/utils';
@@ -37,6 +39,7 @@ export class InvoiceService implements OnModuleInit {
   private readonly accInvoiceMap = new Map<string, object>();
   private readonly invoiceMemCache = new Map<string, object>();
   private readonly baseUrlInvoice = process.env.BASE_URL_INVOICE;
+  private captchaWorker: Promise<Worker> | null = null;
 
   private isProcessingQueue = false;
   private pendingQueueRerun = false;
@@ -654,17 +657,34 @@ export class InvoiceService implements OnModuleInit {
             cacheTempKey,
           )
         : dataCacheRes?.invoiceNoCodeData;
-    // const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59;ttxly==8`;
-    // invoiceCashRegisterDataRes =
-    //   !checkCache || (renewCache && renewType == 'invoiceCashRegister')
-    //     ? await this.callGetInvoice<InvoiceData[]>(
-    //         tokenInvoice,
-    //         urlInvoiceCashRegister,
-    //         cacheTempKey,
-    //         true,
-    //       )
-    //     : dataCacheRes?.invoiceCashRegisterData;
-    invoiceCashRegisterDataRes = [];
+    if (!checkCache || (renewCache && renewType == 'invoiceCashRegister')) {
+      const ranges = this.splitDateRange(from, to, 10);
+      for (let index = 0; index < ranges.length; index++) {
+        const range = ranges[index];
+        const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/purchase?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${range.from}T00:00:00;tdlap=le=${range.to}T23:59:59;ttxly==8`;
+        const rangeData = await this.callGetInvoiceWithCaptcha<InvoiceData[]>(
+          tokenInvoice,
+          urlInvoiceCashRegister,
+          cacheTempKey,
+          true,
+        );
+        if (rangeData[0]?.['error']) {
+          invoiceCashRegisterDataRes = rangeData;
+          break;
+        }
+        invoiceCashRegisterDataRes.push(...rangeData);
+        if (index < ranges.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+      invoiceCashRegisterDataRes = invoiceCashRegisterDataRes.map(
+        (invoice, index) =>
+          invoice['error'] ? invoice : { ...invoice, stt: index + 1 },
+      );
+    } else {
+      invoiceCashRegisterDataRes = dataCacheRes?.invoiceCashRegisterData;
+    }
+    // invoiceCashRegisterDataRes = [];
 
     const dataRes = {
       invoiceIssuedData: invoiceIssuedDataRes,
@@ -694,6 +714,26 @@ export class InvoiceService implements OnModuleInit {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
     return { data: dataRes, isError };
+  }
+
+  private splitDateRange(
+    from: string,
+    to: string,
+    days: number,
+  ): { from: string; to: string }[] {
+    const ranges: { from: string; to: string }[] = [];
+    const end = moment(to, 'DD/MM/YYYY', true);
+    let start = moment(from, 'DD/MM/YYYY', true);
+
+    while (!start.isAfter(end, 'day')) {
+      const rangeEnd = moment.min(start.clone().add(days - 1, 'days'), end);
+      ranges.push({
+        from: start.format('DD/MM/YYYY'),
+        to: rangeEnd.format('DD/MM/YYYY'),
+      });
+      start = rangeEnd.clone().add(1, 'day');
+    }
+    return ranges;
   }
 
   async callGetInvoice<T>(
@@ -811,6 +851,297 @@ export class InvoiceService implements OnModuleInit {
       if (retry <= 2) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         return this.callGetInvoice<T>(
+          token,
+          url,
+          cacheKey,
+          lastWait,
+          retry + 1,
+        );
+      }
+      return [
+        {
+          error:
+            error.response?.data?.message ||
+            error.message ||
+            'Có lỗi xảy ra khi lấy hoá đơn',
+        },
+      ] as T;
+    }
+  }
+
+  private getCaptchaWorker(): Promise<Worker> {
+    if (!this.captchaWorker) {
+      this.captchaWorker = (async () => {
+        // Tắt adaptive learning để kết quả không phụ thuộc các captcha đã đọc trước đó
+        const worker = await createWorker('eng', undefined, undefined, {
+          classify_enable_learning: '0',
+          classify_enable_adaptive_matcher: '0',
+        } as Parameters<typeof createWorker>[3]);
+        // Captcha chỉ gồm chữ in hoa + số, không dùng 0 O 1 I L
+        await worker.setParameters({
+          tessedit_char_whitelist: 'ABCDEFGHJKMNPQRSTUVWXYZ23456789',
+          tessedit_pageseg_mode: PSM.SINGLE_CHAR,
+        });
+        return worker;
+      })().catch((error) => {
+        this.captchaWorker = null;
+        throw error;
+      });
+    }
+    return this.captchaWorker;
+  }
+
+  // Render 1 ký tự captcha (SVG path) thành PNG đen trắng cho Tesseract
+  private renderCaptchaChar(
+    d: string,
+    minX: number,
+    width: number,
+    options: { stroke?: number; evenOdd?: boolean },
+  ): Promise<Buffer> {
+    const { stroke = 0, evenOdd = false } = options;
+    const attrs = [
+      'fill="#000"',
+      evenOdd ? 'fill-rule="evenodd"' : '',
+      stroke ? `stroke="#000" stroke-width="${stroke}"` : '',
+      stroke && !evenOdd ? 'stroke-linejoin="round"' : '',
+    ].join(' ');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="40" viewBox="${minX},0,${width},40"><rect x="${minX}" width="${width}" height="40" fill="#fff"/><path ${attrs} d="${d}"/></svg>`;
+    return sharp(Buffer.from(svg), { density: 288 })
+      .grayscale()
+      .threshold(128)
+      .extend({ top: 30, bottom: 30, left: 30, right: 30, background: '#fff' })
+      .png()
+      .toBuffer();
+  }
+
+  private async recognizeInvoiceCaptcha(svg: string): Promise<string> {
+    // Mỗi ký tự là 1 <path> có fill, các đường nhiễu là <path fill="none">
+    const chars = [...svg.matchAll(/<path[^>]*>/g)]
+      .map((match) => match[0])
+      .filter((path) => !path.includes('fill="none"'))
+      .map((path) => {
+        const d = path.match(/\sd="([^"]+)"/)?.[1] ?? '';
+        const xs = [
+          ...d.matchAll(/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g),
+        ].map((match) => parseFloat(match[1]));
+        return { d, minX: Math.min(...xs), maxX: Math.max(...xs) };
+      })
+      .filter((char) => char.d && Number.isFinite(char.minX))
+      .sort((a, b) => a.minX - b.minX);
+
+    const worker = await this.getCaptchaWorker();
+    let cvalue = '';
+    for (const char of chars) {
+      const minX = char.minX - 4;
+      const width = char.maxX - char.minX + 8;
+      // Nửa đầu subpath là mặt chữ, nửa sau là bóng đổ
+      const subPaths = char.d.split(/(?=M)/);
+      const frontD = subPaths.slice(0, subPaths.length / 2).join('');
+
+      // Chữ trong captcha rỗng ruột + có bóng => nhận dạng nhiều biến thể rồi vote theo confidence
+      const images = await Promise.all([
+        ...[1, 1.5, 2].map((stroke) =>
+          this.renderCaptchaChar(char.d, minX, width, { stroke }),
+        ),
+        ...[0, 0.5, 1].map((stroke) =>
+          this.renderCaptchaChar(frontD, minX, width, {
+            stroke,
+            evenOdd: true,
+          }),
+        ),
+      ]);
+      const scores: Record<string, number> = {};
+      for (const image of images) {
+        const { data } = await worker.recognize(image);
+        const letter = data.text.replace(/[^A-Z0-9]/g, '')[0];
+        if (letter) {
+          scores[letter] = (scores[letter] || 0) + Math.max(data.confidence, 1);
+        }
+      }
+      const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+      cvalue += best?.[0] ?? '';
+    }
+    return cvalue;
+  }
+
+  private async solveInvoiceCaptcha(maxAttempts = 5): Promise<{
+    ckey: string;
+    cvalue: string;
+  }> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const res = await axios.get(`${this.baseUrlInvoice}/captcha`, {
+        headers: {
+          'request-id': randomUUID(),
+        },
+        timeout: 10000,
+      });
+
+      const ckey: string = res?.data?.key;
+      const svg: string = res?.data?.content;
+      if (!ckey || !svg) {
+        throw new Error(
+          `Captcha response unexpected: ${JSON.stringify(res?.data)}`,
+        );
+      }
+
+      const cvalue = await this.recognizeInvoiceCaptcha(svg);
+      // Captcha luôn là 6 ký tự in hoa/số, sai định dạng thì lấy captcha mới
+      if (/^[A-Z0-9]{6}$/.test(cvalue)) {
+        Logger.log(`Solve captcha ${ckey} => ${cvalue}`);
+        return { ckey, cvalue };
+      }
+      Logger.warn(
+        `Solve captcha ${ckey} => invalid "${cvalue}" (attempt ${attempt}/${maxAttempts})`,
+      );
+    }
+    throw new Error('Không nhận dạng được captcha');
+  }
+
+  async callGetInvoiceWithCaptcha<T>(
+    token: string,
+    url: string,
+    cacheKey: string,
+    lastWait = false,
+    retry = 0,
+  ): Promise<T> {
+    try {
+      const allInvoices: Invoice[] = [];
+      let nextState: string | undefined = undefined;
+
+      const dataCache = await this.redisService.hget(cacheKey, url);
+      if (dataCache) {
+        return JSON.parse(dataCache) as T;
+      }
+
+      const pageCacheKey = `${cacheKey}_state_${url}`;
+
+      do {
+        const baseRequestUrl = nextState
+          ? url.replace('$state$', `&state=${nextState}`)
+          : url.replace('$state$', '');
+
+        const pageCache = await this.redisService.hget(
+          pageCacheKey,
+          baseRequestUrl,
+        );
+        if (pageCache) {
+          const page = JSON.parse(pageCache) as {
+            datas: Invoice[];
+            state?: string;
+          };
+          allInvoices.push(...page.datas);
+          nextState = page.state;
+          Logger.log(
+            `Fetching invoices from cache: ${baseRequestUrl} => Done - Size: ${page.datas.length} invoices - Next state: ${nextState}`,
+          );
+          continue;
+        }
+
+        const { ckey, cvalue } = await this.solveInvoiceCaptcha();
+        const requestUrl: string = `${baseRequestUrl}${baseRequestUrl.includes('?') ? '&' : '?'}ckey=${encodeURIComponent(ckey)}&cvalue=${encodeURIComponent(cvalue)}`;
+
+        const res = await axios.get(requestUrl, {
+          headers: {
+            'request-id': randomUUID(),
+            Authorization: `Bearer ${token}`,
+          },
+          timeout: 20000,
+        });
+
+        const data: Invoice[] = res?.data?.datas;
+        if (!data) {
+          Logger.warn(
+            `Response unexpected or empty for URL: ${requestUrl} - Response data: ${JSON.stringify(res?.data)}`,
+          );
+          throw new Error(
+            `Response unexpected or empty for URL: ${requestUrl}`,
+          );
+        }
+        nextState = res?.data?.state;
+        Logger.log(
+          `Fetching invoices from URL: ${requestUrl} => Done - Size: ${data.length} invoices - Next state: ${nextState}`,
+        );
+
+        allInvoices.push(...data);
+        if (nextState) {
+          await this.redisService.hset(
+            pageCacheKey,
+            baseRequestUrl,
+            JSON.stringify({ datas: data, state: nextState }),
+            8 * 60 * 60,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      } while (nextState);
+
+      await this.redisService.del(pageCacheKey);
+
+      if (!lastWait) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      if (allInvoices.length > 0) {
+        const filtered = allInvoices.filter((invoice: Invoice) => {
+          const name = invoice?.nbten?.toUpperCase() || '';
+          return !name.includes('NGÂN HÀNG') && !name.includes('NGAN HANG');
+        });
+
+        const result = await Promise.all(
+          filtered.map(async (invoice: Invoice, index: number) => {
+            const diengiai = await this.getInvoiceDetail(invoice, token, true);
+
+            return {
+              stt: index + 1,
+              khmshdon: invoice.khmshdon,
+              khhdon: invoice.khhdon,
+              shdon: invoice.shdon,
+              tdlap: moment(invoice.tdlap)
+                .tz('Asia/Ho_Chi_Minh')
+                .format('DD/MM/YYYY'),
+              nbmst: invoice.nbmst,
+              nbten: invoice.nbten,
+              nmten: invoice.nmten,
+              nmmst: invoice.nmmst,
+              tgtcthue: invoice.tgtcthue,
+              tgtthue: invoice.tgtthue,
+              ttcktmai: invoice.ttcktmai,
+              tgtphi: invoice?.tgtphi,
+              tgtttbso: invoice.tgtttbso,
+              tthai: INVOICE_TTHAI_MAP[invoice.tthai] ?? invoice.tthai,
+              ttxly: INVOICE_TTXLY_MAP[invoice.ttxly] ?? invoice.ttxly,
+              nmdchi: invoice.nmdchi,
+              khmshdgoc: invoice.khmshdgoc,
+              khhdgoc: invoice.khhdgoc,
+              shdgoc: invoice.shdgoc,
+              tdlhdgoc: invoice.tdlhdgoc
+                ? moment(invoice.tdlhdgoc)
+                    .tz('Asia/Ho_Chi_Minh')
+                    .format('DD/MM/YYYY')
+                : '',
+              diengiai,
+            };
+          }),
+        );
+        await this.redisService.hset(
+          cacheKey,
+          url,
+          JSON.stringify(result),
+          8 * 60 * 60,
+        );
+        Logger.log(
+          `Get invoices from URL: ${url} => Done - Size: ${result.length} invoices`,
+        );
+
+        return result as T;
+      }
+
+      return [] as T;
+    } catch (error) {
+      Logger.error(
+        `Error fetching purchase invoices with captcha: ${error.response?.data?.message || error.message} - url: ${url}`,
+      );
+      if (retry <= 2) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return this.callGetInvoiceWithCaptcha<T>(
           token,
           url,
           cacheKey,
@@ -1431,17 +1762,34 @@ export class InvoiceService implements OnModuleInit {
             cacheTempKey,
           )
         : dataCacheRes?.invoiceElectronicData;
-    // const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${from}T00:00:00;tdlap=le=${to}T23:59:59`;
-    // invoiceCashRegisterDataRes =
-    //   !checkCache || (renewCache && renewType == 'invoiceCashRegister')
-    //     ? await this.callGetInvoice<InvoiceData[]>(
-    //         tokenInvoice,
-    //         urlInvoiceCashRegister,
-    //         cacheTempKey,
-    //         true,
-    //       )
-    //     : dataCacheRes?.invoiceCashRegisterData;
-    invoiceCashRegisterDataRes = [];
+    if (!checkCache || (renewCache && renewType == 'invoiceCashRegister')) {
+      const ranges = this.splitDateRange(from, to, 10);
+      for (let index = 0; index < ranges.length; index++) {
+        const range = ranges[index];
+        const urlInvoiceCashRegister = `${this.baseUrlInvoice}/sco-query/invoices/sold?sort=tdlap:desc&size=50$state$&search=tdlap=ge=${range.from}T00:00:00;tdlap=le=${range.to}T23:59:59`;
+        const rangeData = await this.callGetInvoiceWithCaptcha<InvoiceData[]>(
+          tokenInvoice,
+          urlInvoiceCashRegister,
+          cacheTempKey,
+          true,
+        );
+        if (rangeData[0]?.['error']) {
+          invoiceCashRegisterDataRes = rangeData;
+          break;
+        }
+        invoiceCashRegisterDataRes.push(...rangeData);
+        if (index < ranges.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+      invoiceCashRegisterDataRes = invoiceCashRegisterDataRes.map(
+        (invoice, index) =>
+          invoice['error'] ? invoice : { ...invoice, stt: index + 1 },
+      );
+    } else {
+      invoiceCashRegisterDataRes = dataCacheRes?.invoiceCashRegisterData;
+    }
+    // invoiceCashRegisterDataRes = [];
 
     const dataRes = {
       invoiceElectronicData: invoiceElectronicDataRes,
