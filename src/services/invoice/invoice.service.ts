@@ -23,7 +23,7 @@ import sharp from 'sharp';
 import { createWorker, PSM, Worker } from 'tesseract.js';
 import moment from 'moment-timezone';
 import { RedisService } from '../redis/redis.service';
-import { parseDate } from 'src/utils';
+import { parseDate, wait } from 'src/utils';
 import { INVOICE_TASK_QUEUE_TYPES } from 'src/constants';
 import { INVOICE_TTHAI_MAP, INVOICE_TTXLY_MAP } from '../../constants';
 
@@ -677,7 +677,7 @@ export class InvoiceService implements OnModuleInit {
         }
         invoiceCashRegisterDataRes.push(...rangeData);
         if (index < ranges.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await wait(2000);
         }
       }
       invoiceCashRegisterDataRes = invoiceCashRegisterDataRes.map(
@@ -714,7 +714,7 @@ export class InvoiceService implements OnModuleInit {
       isError = true;
     }
     if (!lastWait) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await wait(1500);
     }
     return { data: dataRes, isError };
   }
@@ -784,12 +784,12 @@ export class InvoiceService implements OnModuleInit {
 
         allInvoices.push(...data);
         if (nextState) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await wait(2000);
         }
       } while (nextState);
 
       if (!lastWait) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await wait(2000);
       }
       if (allInvoices.length > 0) {
         const filtered = allInvoices.filter((invoice: Invoice) => {
@@ -852,7 +852,7 @@ export class InvoiceService implements OnModuleInit {
         `Error fetching purchase invoices: ${error.response?.data?.message || error.message} - url: ${url}`,
       );
       if (retry <= 2) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await wait(2000);
         return this.callGetInvoice<T>(
           token,
           url,
@@ -1073,14 +1073,14 @@ export class InvoiceService implements OnModuleInit {
             JSON.stringify({ datas: data, state: nextState }),
             8 * 60 * 60,
           );
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await wait(2000);
         }
       } while (nextState);
 
       await this.redisService.del(pageCacheKey);
 
       if (!lastWait) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await wait(2000);
       }
       if (allInvoices.length > 0) {
         const filtered = allInvoices.filter((invoice: Invoice) => {
@@ -1143,7 +1143,7 @@ export class InvoiceService implements OnModuleInit {
         `Error fetching purchase invoices with captcha: ${error.response?.data?.message || error.message} - url: ${url}`,
       );
       if (retry <= 2) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await wait(2000);
         return this.callGetInvoiceWithCaptcha<T>(
           token,
           url,
@@ -1782,7 +1782,7 @@ export class InvoiceService implements OnModuleInit {
         }
         invoiceCashRegisterDataRes.push(...rangeData);
         if (index < ranges.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await wait(2000);
         }
       }
       invoiceCashRegisterDataRes = invoiceCashRegisterDataRes.map(
@@ -1817,7 +1817,7 @@ export class InvoiceService implements OnModuleInit {
       isError = true;
     }
     if (!lastWait) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await wait(1500);
     }
     return { data: dataRes, isError };
   }
@@ -2286,7 +2286,7 @@ export class InvoiceService implements OnModuleInit {
         30 * 24 * 60 * 60,
       );
       Logger.log(`Fetching detail from URL: ${url} => Done`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await wait(1000);
       return diengiai;
     } catch (error) {
       Logger.error(
