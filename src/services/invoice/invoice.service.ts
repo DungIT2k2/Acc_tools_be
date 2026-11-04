@@ -403,6 +403,7 @@ export class InvoiceService implements OnModuleInit {
         tokenInvoice: token,
         access_token: authorization,
       }),
+      8 * 60 * 60,
     );
     const access_token = this.authService.signToken({
       username: req['user']['username'],
