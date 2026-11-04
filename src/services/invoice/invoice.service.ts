@@ -397,10 +397,13 @@ export class InvoiceService implements OnModuleInit {
     const timeNow = Date.now();
     const key = `${username}_${timeNow}`;
 
-    this.accInvoiceMap.set(key, {
-      tokenInvoice: token,
-      access_token: authorization,
-    });
+    await this.redisService.set(
+      key,
+      JSON.stringify({
+        tokenInvoice: token,
+        access_token: authorization,
+      }),
+    );
     const access_token = this.authService.signToken({
       username: req['user']['username'],
       fullName,
@@ -410,16 +413,16 @@ export class InvoiceService implements OnModuleInit {
     return { access_token };
   }
 
-  public handleLogoutInvoice(req: any): object {
+  public async handleLogoutInvoice(req: any): Promise<object> {
     if (!req['user']['usernameInvoice'] || !req['user']['time'])
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     const { usernameInvoice, time } = req['user'];
     const key = `${usernameInvoice}_${time}`;
-    this.accInvoiceMap.get(key);
-    const access_token = this.accInvoiceMap.get(key)?.['access_token'];
-    if (!access_token)
+    const cacheData = await this.redisService.get(key);
+    if (!cacheData)
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-    this.accInvoiceMap.delete(key);
+    const access_token = JSON.parse(cacheData)?.['access_token'];
+    await this.redisService.del(key);
     return { access_token };
   }
 
