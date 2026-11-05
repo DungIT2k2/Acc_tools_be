@@ -1,27 +1,39 @@
 import {
   Body,
   Controller,
-  Get,
   HttpCode,
   Post,
-  Query,
   Req,
   Res,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileService } from './file.service';
 import type { Response } from 'express';
 import moment from 'moment';
+import { ApiExcelFileResponse, ApiMultipart } from '../../swagger';
+import {
+  CompareFileDto,
+  ExportFileCompareResultDto,
+  GetHeaderInFileDto,
+  TranscodingDto,
+} from './file.dto';
 
+@ApiTags('File')
+@ApiBearerAuth()
 @Controller('file')
 export class FileController {
   constructor(private readonly fileService: FileService) {}
 
+  /**
+   * Đọc danh sách header (tên cột) theo từng sheet trong file Excel
+   */
   @Post('getHeaderInFile')
   @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 1 }]))
   @HttpCode(200)
+  @ApiMultipart(GetHeaderInFileDto)
   getHeaderInFile(
     @UploadedFiles() files: { File?: File[] },
     @Req() req: Request,
@@ -29,21 +41,29 @@ export class FileController {
     return this.fileService.getHeaderInFile(files, req);
   }
 
+  /**
+   * So sánh dữ liệu giữa 2 file Excel theo điều kiện mapping
+   */
   @Post('compareFile')
   @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 2 }]))
   @HttpCode(200)
+  @ApiMultipart(CompareFileDto)
   compareFile(
     @UploadedFiles() files: { File?: File[] },
-    @Body() formData: { condition: string },
+    @Body() formData: CompareFileDto,
     @Req() req: Request,
   ): object {
     return this.fileService.compareFile(files, formData, req);
   }
 
+  /**
+   * Xuất kết quả so sánh 2 file ra Excel
+   */
   @Post('exportCompareResult')
   @HttpCode(200)
+  @ApiExcelFileResponse()
   async exportCompareResult(
-    @Body() body: { record: string; sheetNames: string[] },
+    @Body() body: ExportFileCompareResultDto,
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -66,12 +86,17 @@ export class FileController {
     return res.send(buffer);
   }
 
+  /**
+   * Chuyển mã font chữ trong file Excel (Unicode <-> VNI)
+   */
   @Post('transcoding')
   @UseInterceptors(FileFieldsInterceptor([{ name: 'File', maxCount: 1 }]))
   @HttpCode(200)
+  @ApiMultipart(TranscodingDto)
+  @ApiExcelFileResponse()
   async transcoding(
     @UploadedFiles() files: { File?: File[] },
-    @Body() formData: { type: string },
+    @Body() formData: TranscodingDto,
     @Req() req: Request,
     @Res() res: Response,
   ) {
